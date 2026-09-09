@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { CHANNEL_LABEL, LANGUAGE_LABEL, TOOL_CALL_STATUS_LABEL, tr } from "../labels";
 
 export default function Chat() {
   const [conversations, setConversations] = useState<any[]>([]);
@@ -63,7 +64,7 @@ export default function Chat() {
         >
           {conversations.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.channel} · {c.language} · {new Date(c.createdAt).toLocaleString("ar-SA")}
+              {tr(CHANNEL_LABEL, c.channel)} · {tr(LANGUAGE_LABEL, c.language)} · {new Date(c.createdAt).toLocaleString("ar-SA")}
             </option>
           ))}
         </select>
@@ -85,7 +86,7 @@ export default function Chat() {
                 الأدوات المستخدمة:{" "}
                 {JSON.parse(m.toolCallsJson).map((tc: any, i: number) => (
                   <span key={i} className="badge" style={{ background: "var(--border)" }}>
-                    {tc.name} ({tc.status})
+                    {tc.name} — {tr(TOOL_CALL_STATUS_LABEL, tc.status)}
                   </span>
                 ))}
               </div>
@@ -103,7 +104,7 @@ export default function Chat() {
           disabled={!activeId || sending}
         />
         <button className="btn primary" onClick={send} disabled={!activeId || sending}>
-          {sending ? "..." : "إرسال"}
+          {sending ? "جارٍ الإرسال…" : "إرسال"}
         </button>
       </div>
     </div>

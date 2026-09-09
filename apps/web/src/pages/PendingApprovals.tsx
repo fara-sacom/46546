@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { TIER_LABEL, tr } from "../labels";
 
 export default function PendingApprovals() {
   const [actions, setActions] = useState<any[]>([]);
@@ -41,8 +42,8 @@ export default function PendingApprovals() {
       {actions.length === 0 && <p className="muted">لا توجد إجراءات حساسة بانتظار الموافقة حاليًا.</p>}
       {actions.map((a) => (
         <div className="panel" key={a.id}>
-          <span className={`badge ${a.tier}`}>{a.tier}</span>
-          <strong>{a.tool?.name}</strong>
+          <span className={`badge ${a.tier}`}>{tr(TIER_LABEL, a.tier)}</span>
+          <strong>الأداة: {a.tool?.name}</strong>
           <p>{a.summary}</p>
           <pre style={{ background: "var(--bg)", padding: 8, borderRadius: 8, fontSize: 12, overflowX: "auto" }}>
             {JSON.stringify(JSON.parse(a.payloadInput), null, 2)}

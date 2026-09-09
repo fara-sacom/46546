@@ -1,13 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-
-const STATUS_LABEL: Record<string, string> = {
-  PENDING: "بانتظار الموافقة",
-  APPROVED: "تمت الموافقة (يُنفَّذ الآن)",
-  EXECUTED: "تم التنفيذ",
-  FAILED: "فشل",
-  REJECTED: "مرفوض",
-};
+import { ACTION_STATUS_LABEL as STATUS_LABEL } from "../labels";
 
 export default function Operations() {
   const [actions, setActions] = useState<any[]>([]);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, getStaffKey, setStaffKey } from "./api";
+import { INTEGRATION_LABEL, tr } from "./labels";
 import Chat from "./pages/Chat";
 import PendingApprovals from "./pages/PendingApprovals";
 import Operations from "./pages/Operations";
@@ -41,7 +42,7 @@ export default function App() {
             </div>
             {Object.entries(health.integrations).map(([k, v]) => (
               <div key={k}>
-                {k}: <span className={`badge ${v ? "ok" : "missing"}`}>{v ? "متصل" : "غير مُهيّأ"}</span>
+                {tr(INTEGRATION_LABEL, k)}: <span className={`badge ${v ? "ok" : "missing"}`}>{v ? "متصل" : "غير مُهيّأ"}</span>
               </div>
             ))}
           </div>
@@ -50,7 +51,7 @@ export default function App() {
       <main className="main">
         <div className="key-bar">
           <input
-            placeholder="مفتاح الموظف (X-FARA-Staff-Key)"
+            placeholder="مفتاح الموظف"
             value={keyInput}
             onChange={(e) => setKeyInput(e.target.value)}
           />

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { AUDIT_RESULT_LABEL, TIER_LABEL, tr } from "../labels";
 
 export default function AuditLog() {
   const [entries, setEntries] = useState<any[]>([]);
@@ -13,7 +14,7 @@ export default function AuditLog() {
 
   return (
     <div>
-      <h2>سجل التدقيق (Audit Log)</h2>
+      <h2>سجل التدقيق</h2>
       <div className="panel">
         <label>
           <input type="checkbox" checked={onlyErrors} onChange={(e) => setOnlyErrors(e.target.checked)} /> عرض الأخطاء والتنبيهات فقط
@@ -39,8 +40,8 @@ export default function AuditLog() {
                 <td>{e.actor?.name ?? e.actorLabel}</td>
                 <td style={{ maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>{e.requestText}</td>
                 <td>{JSON.parse(e.toolsUsed).join(", ")}</td>
-                <td><span className={`badge ${e.tier}`}>{e.tier}</span></td>
-                <td>{e.result}</td>
+                <td><span className={`badge ${e.tier}`}>{tr(TIER_LABEL, e.tier)}</span></td>
+                <td>{tr(AUDIT_RESULT_LABEL, e.result)}</td>
                 <td>{e.errorText ?? "-"}</td>
               </tr>
             ))}
