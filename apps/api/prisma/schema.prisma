@@ -1,0 +1,185 @@
+// FARA AI Agent - data model
+// Dev/test uses SQLite (file:./dev.db) for zero-dependency portability.
+// For production, switch datasource provider to "postgresql" and point
+// DATABASE_URL at a real Postgres instance - no model here uses a
+// SQLite-only type, so the switch is a two-line change (see docs).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum StaffRole {
+  ADMIN // can approve ACTION items, manage credentials
+  OPERATOR // can chat with the agent, approve within limits
+  VIEWER // read-only access to dashboard
+}
+
+enum PermissionTier {
+  READ
+  DRAFT
+  ACTION
+}
+
+enum ActionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXECUTED
+  FAILED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+  TOOL
+}
+
+enum Channel {
+  DASHBOARD
+  WHATSAPP
+  INSTAGRAM
+  TIKTOK
+  SNAPCHAT
+  YOUTUBE
+}
+
+model StaffUser {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      StaffRole @default(OPERATOR)
+  apiKeyHash String  @unique
+  createdAt DateTime @default(now())
+
+  conversations Conversation[]
+  decisions     AgentAction[]  @relation("Decider")
+  requested     AgentAction[]  @relation("Requester")
+  auditEntries  AuditLog[]
+}
+
+model Conversation {
+  id         String   @id @default(cuid())
+  channel    Channel  @default(DASHBOARD)
+  language   String   @default("ar") // "ar" (Saudi tone) | "en"
+  customerRef String? // external customer id/phone/handle if applicable
+  staffUserId String?
+  staffUser  StaffUser? @relation(fields: [staffUserId], references: [id])
+  status     String   @default("open") // open | closed
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  messages Message[]
+  actions  AgentAction[]
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  role           MessageRole
+  content        String
+  toolCallsJson  String?     // JSON: tools the agent invoked to produce this message
+  createdAt      DateTime    @default(now())
+}
+
+model ToolRegistryEntry {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g. "salla.products.list"
+  integration String   // salla | whatsapp | youtube | instagram | tiktok | snapchat | system
+  tier        PermissionTier
+  description String
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  actions AgentAction[]
+}
+
+model AgentAction {
+  id             String        @id @default(cuid())
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id])
+
+  toolId   String
+  tool     ToolRegistryEntry @relation(fields: [toolId], references: [id])
+  tier     PermissionTier
+
+  requestedById String?
+  requestedBy   StaffUser? @relation("Requester", fields: [requestedById], references: [id])
+
+  summary        String   // human-readable description, e.g. "تعديل سعر المنتج X من 100 إلى 90"
+  payloadInput   String   // JSON: parameters proposed for the tool call
+  payloadBefore  String?  // JSON: state before (for diff display)
+  payloadAfter   String?  // JSON: state after execution (filled once executed)
+
+  status ActionStatus @default(PENDING)
+
+  decidedById String?
+  decidedBy   StaffUser? @relation("Decider", fields: [decidedById], references: [id])
+  decidedAt   DateTime?
+  decisionNote String?
+
+  executedAt DateTime?
+  result     String?   // JSON result or error message
+  error      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  auditEntries AuditLog[]
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  actionId       String?
+  action         AgentAction? @relation(fields: [actionId], references: [id])
+
+  actorId    String?
+  actor      StaffUser? @relation(fields: [actorId], references: [id])
+  actorLabel String   // fallback label when actor isn't a staff user (e.g. "FARA Agent", "Customer via WhatsApp")
+
+  requestText String  // what was asked
+  toolsUsed   String  // JSON array of tool names invoked
+  changes     String? // JSON diff of what changed
+  tier        PermissionTier
+  result      String  // success | failed | pending | rejected
+  errorText   String?
+
+  createdAt DateTime @default(now())
+}
+
+model CampaignDraft {
+  id          String   @id @default(cuid())
+  productRef  String?
+  channel     Channel
+  title       String
+  copyText    String
+  budgetProposed Float?
+  currency    String   @default("SAR")
+  status      String   @default("draft") // draft | approved | rejected | launched
+  createdAt   DateTime @default(now())
+}
+
+model CustomerReplyDraft {
+  id             String   @id @default(cuid())
+  conversationId String?
+  channel        Channel
+  language       String
+  draftText      String
+  status         String   @default("draft") // draft | sent | discarded
+  createdAt      DateTime @default(now())
+}
+
+model IntegrationCredential {
+  id         String   @id @default(cuid())
+  provider   String   @unique // salla | whatsapp | meta | tiktok | snapchat | youtube
+  configured Boolean  @default(false)
+  scopes     String?
+  metadata   String?  // JSON, never store raw secrets here - secrets stay in env vars
+  updatedAt  DateTime @updatedAt
+}

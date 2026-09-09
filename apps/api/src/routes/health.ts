@@ -1,0 +1,19 @@
+import { Router } from "express";
+import { env } from "../env.js";
+import { isSallaConfigured } from "../integrations/salla/client.js";
+import { isWhatsAppConfigured } from "../integrations/whatsapp/client.js";
+import { socialConfigStatus } from "../integrations/social/tools.js";
+
+export const healthRouter = Router();
+
+healthRouter.get("/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    agentConfigured: !!env.anthropicApiKey,
+    integrations: {
+      salla: isSallaConfigured(),
+      whatsapp: isWhatsAppConfigured(),
+      ...socialConfigStatus(),
+    },
+  });
+});
