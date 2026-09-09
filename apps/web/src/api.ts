@@ -38,4 +38,5 @@ export const api = {
   approve: (id: string, note?: string) => request(`/actions/${id}/approve`, { method: "POST", body: JSON.stringify({ note }) }),
   reject: (id: string, note?: string) => request(`/actions/${id}/reject`, { method: "POST", body: JSON.stringify({ note }) }),
   auditLog: () => request<{ entries: any[] }>("/audit-log"),
+  aiServices: () => request<{ services: any[] }>("/ai-services"),
 };

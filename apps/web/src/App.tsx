@@ -6,6 +6,7 @@ import PendingApprovals from "./pages/PendingApprovals";
 import Operations from "./pages/Operations";
 import AuditLog from "./pages/AuditLog";
 import Tools from "./pages/Tools";
+import AIServices from "./pages/AIServices";
 
 const TABS = [
   { id: "chat", label: "المحادثات" },
@@ -13,6 +14,7 @@ const TABS = [
   { id: "operations", label: "سجل العمليات" },
   { id: "audit", label: "سجل التدقيق" },
   { id: "tools", label: "الأدوات" },
+  { id: "ai-services", label: "خدمات الذكاء الاصطناعي" },
 ];
 
 export default function App() {
@@ -65,6 +67,7 @@ export default function App() {
         {tab === "operations" && <Operations />}
         {tab === "audit" && <AuditLog />}
         {tab === "tools" && <Tools />}
+        {tab === "ai-services" && <AIServices />}
       </main>
     </div>
   );

@@ -46,6 +46,11 @@ export const INTEGRATION_LABEL: Record<string, string> = {
   tiktok: "تيك توك",
   snapchat: "سناب شات",
   system: "عام",
+  "claude-vision": "تحليل الصور (Claude)",
+  tavily: "البحث (Tavily)",
+  mymemory: "الترجمة (MyMemory)",
+  huggingface: "توليد الصور (Hugging Face)",
+  removebg: "إزالة الخلفية (remove.bg)",
 };
 
 export const LANGUAGE_LABEL: Record<string, string> = {

@@ -49,6 +49,25 @@ export const env = {
     accessToken: optional("SNAPCHAT_ACCESS_TOKEN"),
     adAccountId: optional("SNAPCHAT_AD_ACCOUNT_ID"),
   },
+
+  tavily: {
+    apiKey: optional("TAVILY_API_KEY"),
+  },
+
+  mymemory: {
+    // Not a secret - an optional contact email MyMemory's free API uses to
+    // raise the anonymous rate limit from 5,000 to ~10,000 words/day.
+    contactEmail: optional("MYMEMORY_CONTACT_EMAIL"),
+  },
+
+  huggingface: {
+    apiToken: optional("HUGGINGFACE_API_TOKEN"),
+    imageModel: optional("HUGGINGFACE_IMAGE_MODEL") ?? "stabilityai/stable-diffusion-xl-base-1.0",
+  },
+
+  removebg: {
+    apiKey: optional("REMOVEBG_API_KEY"),
+  },
 };
 
 export function isConfigured(...values: (string | undefined)[]): boolean {

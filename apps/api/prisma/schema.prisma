@@ -183,3 +183,15 @@ model IntegrationCredential {
   metadata   String?  // JSON, never store raw secrets here - secrets stay in env vars
   updatedAt  DateTime @updatedAt
 }
+
+model GeneratedAsset {
+  id             String   @id @default(cuid())
+  conversationId String?
+  kind           String   // image_generated | image_background_removed
+  provider       String   // huggingface | removebg
+  prompt         String?  // the generation prompt, or a note describing the source image
+  mimeType       String
+  dataBase64     String   // the asset itself - small preview-grade assets only (see docs)
+  status         String   @default("draft") // draft | used | discarded
+  createdAt      DateTime @default(now())
+}

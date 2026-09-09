@@ -2,10 +2,22 @@ import type { ToolDefinition } from "./types.js";
 import { sallaTools } from "../integrations/salla/tools.js";
 import { whatsappTools } from "../integrations/whatsapp/tools.js";
 import { socialTools } from "../integrations/social/tools.js";
+import { visionTools } from "../integrations/vision/tools.js";
+import { searchTools } from "../integrations/search/tools.js";
+import { translationTools } from "../integrations/translation/tools.js";
+import { imageTools } from "../integrations/image/tools.js";
 import { prisma } from "../db.js";
 
 /** Single source of truth for every tool FARA AI Agent may call. */
-export const allTools: ToolDefinition[] = [...sallaTools, ...whatsappTools, ...socialTools];
+export const allTools: ToolDefinition[] = [
+  ...sallaTools,
+  ...whatsappTools,
+  ...socialTools,
+  ...visionTools,
+  ...searchTools,
+  ...translationTools,
+  ...imageTools,
+];
 
 const byName = new Map(allTools.map((t) => [t.name, t]));
 

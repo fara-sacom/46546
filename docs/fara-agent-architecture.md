@@ -32,9 +32,19 @@ docs/      → هذا المستند
 - **WhatsApp** (`whatsapp/`): Meta WhatsApp Cloud API. `draftReply` (DRAFT) يجهّز مسودة، `sendMessage` (ACTION) يرسل فعليًا بعد الموافقة. مسار Webhook وارد جاهز في `routes/webhooks.ts` — الرسائل الواردة تُمرَّر للوكيل لتحليلها/تجهيز مسودة، ولا يُرسل ردّ تلقائي أبدًا.
 - **Social/Marketing** (`social/`): يوتيوب (قراءة حقيقية عبر YouTube Data API)، وMeta/TikTok/Snapchat Marketing APIs لتشغيل الحملات (ACTION فقط). `marketing.prepareCampaignBrief` (DRAFT) يجهّز فكرة/نص حملة دون نشر. `marketing.suggestAdCandidates` (READ) يحلّل بيانات مبيعات سلة الحقيقية لاقتراح منتجات للإعلان.
 
+### 5.1 خدمات الذكاء الاصطناعي العامة (`apps/api/src/integrations/{vision,search,translation,image}`)
+كل خدمة اختيارية (بدون مفتاح = تفشل بخطأ عربي واضح، لا بيانات وهمية)، ومفصّلة حيّة في تبويب "خدمات الذكاء الاصطناعي" باللوحة عبر `agent/aiServices.ts`:
+- **`vision.analyzeImage`** (READ) — تحليل صور المنتجات عبر Claude نفسه (رؤية حاسوبية)، بدون مفتاح إضافي عن `ANTHROPIC_API_KEY`.
+- **`search.web`** (READ) — بحث إنترنت عبر Tavily (1,000 بحث مجاني/شهر بدون بطاقة).
+- **`translate.text`** (READ) — ترجمة عبر MyMemory (5,000 حرف/يوم بدون مفتاح، أو ~10,000 كلمة/يوم ببريد تواصل اختياري).
+- **`image.generate`** (DRAFT) — توليد صورة عبر Hugging Face Inference API، تُحفظ في جدول `GeneratedAsset` كمسودة فقط.
+- **`image.removeBackground`** (DRAFT) — إزالة خلفية صورة منتج عبر remove.bg (معاينة منخفضة الدقة ضمن الخطة المجانية)، تُحفظ كمسودة أيضًا.
+- تُسترجع الأصول المولَّدة عبر `GET /api/assets/:id` (يتطلب نفس مفتاح الموظف).
+- بُحث عن كل هذه الخدمات والتحقق من حدودها الحالية قبل الدمج؛ الشروط تتغيّر، فراجعي صفحة تسعير كل خدمة دوريًا.
+
 ### 6. قاعدة البيانات (`apps/api/prisma/schema.prisma`)
 SQLite للتطوير (`DATABASE_URL=file:./prisma/dev.db`)، جاهزة للتحويل لـ Postgres بتغيير سطرين فقط (لا استخدام لأي نوع بيانات خاص بـ SQLite). الجداول: `StaffUser`, `Conversation`, `Message`, `ToolRegistryEntry`, `AgentAction`, `AuditLog`, `CampaignDraft`, `CustomerReplyDraft`, `IntegrationCredential`.
-بيانات المنتجات/الطلبات/العملاء نفسها **لا تُخزَّن محليًا أبدًا** - تُقرأ مباشرة من سلة في كل مرة لضمان عدم وجود بيانات قديمة أو وهمية.
+بيانات المنتجات/الطلبات/العملاء نفسها **لا تُخزَّن محليًا أبدًا** - تُقرأ مباشرة من سلة في كل مرة لضمان عدم وجود بيانات قديمة أو وهمية. الجدول الإضافي `GeneratedAsset` يخزّن فقط أصولًا مولَّدة (صور مسودة) لخدمات الصور الاختيارية.
 
 ### 7. REST API (`apps/api/src/routes/*`)
 كل الطلبات (عدا `/api/health` والـ webhooks) تتطلب ترويسة `X-FARA-Staff-Key`. الموافقة/الرفض يتطلبان صلاحية `ADMIN`.
@@ -51,10 +61,12 @@ SQLite للتطوير (`DATABASE_URL=file:./prisma/dev.db`)، جاهزة للت�
 | `POST /api/actions/:id/approve` | موافقة وتنفيذ فعلي (ADMIN) |
 | `POST /api/actions/:id/reject` | رفض (ADMIN) |
 | `GET /api/audit-log` | سجل التدقيق الكامل |
+| `GET /api/ai-services` | قائمة خدمات الذكاء الاصطناعي وحالتها وحدودها المجانية |
+| `GET /api/assets/:id` | استرجاع أصل مولَّد (صورة مسودة) |
 | `GET/POST /webhooks/whatsapp` | تحقق واتساب + استقبال رسائل العملاء |
 
 ### 8. لوحة التحكم (`apps/web`)
-React + Vite. تبويبات: المحادثات، بانتظار الموافقة، سجل العمليات، سجل التدقيق، الأدوات - بالإضافة لمؤشر حالة كل تكامل في الشريط الجانبي.
+React + Vite (خط Tajawal للنصوص وMarkazi Text للعناوين، هوية بصرية بلون نبيتي/ذهبي). تبويبات: المحادثات، بانتظار الموافقة، سجل العمليات، سجل التدقيق، الأدوات، خدمات الذكاء الاصطناعي - بالإضافة لمؤشر حالة كل تكامل في الشريط الجانبي. كل نصوص الواجهة عربية بالكامل (`dir="rtl"`)، والمعرّفات التقنية فقط (أسماء الأدوات، الحمولات الخام) تبقى كما هي لأغراض التتبع.
 
 ## تشغيل المشروع
 
