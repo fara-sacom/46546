@@ -1,0 +1,22 @@
+{
+  "name": "fara-ai-agent",
+  "private": true,
+  "version": "1.0.0",
+  "description": "FARA AI Agent - intelligent store assistant for FARA STORE (built on Salla)",
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace apps/api",
+    "dev:web": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspace apps/api && npm run build --workspace apps/web",
+    "test": "npm run test --workspace apps/api",
+    "lint": "npm run lint --workspace apps/api && npm run lint --workspace apps/web",
+    "db:migrate": "npm run db:migrate --workspace apps/api",
+    "db:seed": "npm run db:seed --workspace apps/api"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
