@@ -32,14 +32,34 @@
   }
 }
 * { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--bg); color: var(--text); font-family: "Tajawal", "Segoe UI", system-ui, sans-serif; }
 .app { display: flex; min-height: 100vh; }
 .sidebar { width: 230px; flex-shrink: 0; border-inline-start: 1px solid var(--border); padding: 20px 16px; background: var(--panel); }
+.sidebar-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .sidebar h1 { font-family: "Markazi Text", Georgia, serif; font-weight: 700; font-size: 30px; margin: 0 0 2px; color: var(--accent); }
 .sidebar .subtitle { font-size: 12.5px; color: var(--muted); margin-bottom: 22px; line-height: 1.6; }
-.nav-item { display: block; width: 100%; text-align: start; padding: 10px 12px; margin-bottom: 6px; border-radius: 8px; border: none; background: transparent; color: var(--text); cursor: pointer; font-size: 14px; font-family: inherit; }
+.menu-toggle { display: none; background: transparent; border: 1px solid var(--border); border-radius: 8px; font-size: 18px; padding: 6px 10px; color: var(--text); }
+.nav-row { display: flex; flex-direction: column; gap: 6px; }
+.nav-item { display: block; width: 100%; text-align: start; padding: 10px 12px; border-radius: 8px; border: none; background: transparent; color: var(--text); cursor: pointer; font-size: 14px; font-family: inherit; }
 .nav-item.active { background: var(--accent); color: var(--accent-ink); }
-.main { flex: 1; padding: 24px; max-width: 900px; }
+.health-panel { font-size: 12px; display: flex; flex-direction: column; gap: 2px; }
+.main { flex: 1; padding: 24px; max-width: 900px; min-width: 0; }
+
+@media (max-width: 700px) {
+  .app { flex-direction: column; }
+  .sidebar { width: 100%; border-inline-start: none; border-bottom: 1px solid var(--border); padding: 14px 16px; }
+  .sidebar h1 { font-size: 24px; }
+  .sidebar .subtitle { margin-bottom: 0; }
+  .menu-toggle { display: inline-flex; align-items: center; justify-content: center; }
+  .nav-row { display: none; margin-top: 12px; }
+  .nav-row.open { display: flex; }
+  .nav-item { padding: 12px; }
+  .main { padding: 16px; max-width: 100%; }
+  .key-bar { flex-wrap: wrap; }
+  table { display: block; overflow-x: auto; white-space: nowrap; }
+  .msg, .err-bubble { max-width: 92%; }
+}
 .main h2 { font-family: "Markazi Text", Georgia, serif; font-weight: 700; font-size: 24px; color: var(--text); }
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; margin-inline-end: 6px; }

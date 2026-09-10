@@ -22,9 +22,9 @@ conversationsRouter.post(
   "/conversations",
   requireStaff,
   asyncHandler<AuthedRequest>(async (req, res) => {
-    const { channel = "DASHBOARD", language = "ar", customerRef } = req.body ?? {};
+    const { channel = "DASHBOARD", assistantType = "PERSONAL", language = "ar", customerRef } = req.body ?? {};
     const conversation = await prisma.conversation.create({
-      data: { channel, language, customerRef, staffUserId: req.staff!.id },
+      data: { channel, assistantType, language, customerRef, staffUserId: req.staff!.id },
     });
     res.status(201).json({ conversation });
   })

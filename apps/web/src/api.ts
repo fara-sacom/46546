@@ -25,7 +25,7 @@ export const api = {
   health: () => request<{ status: string; agentConfigured: boolean; integrations: Record<string, boolean> }>("/health"),
   tools: () => request<{ tools: any[] }>("/tools"),
   conversations: () => request<{ conversations: any[] }>("/conversations"),
-  createConversation: (data: { channel?: string; language?: string; customerRef?: string }) =>
+  createConversation: (data: { channel?: string; assistantType?: string; language?: string; customerRef?: string }) =>
     request<{ conversation: any }>("/conversations", { method: "POST", body: JSON.stringify(data) }),
   messages: (conversationId: string) => request<{ messages: any[] }>(`/conversations/${conversationId}/messages`),
   chat: (conversationId: string, text: string) =>
@@ -39,4 +39,8 @@ export const api = {
   reject: (id: string, note?: string) => request(`/actions/${id}/reject`, { method: "POST", body: JSON.stringify({ note }) }),
   auditLog: () => request<{ entries: any[] }>("/audit-log"),
   aiServices: () => request<{ services: any[] }>("/ai-services"),
+  assistants: () => request<{ assistants: any[] }>("/assistants"),
+  getSettings: () => request<{ settings: any }>("/settings"),
+  updateSettings: (data: { responseStyle?: string; shippingPolicy?: string; paymentPolicy?: string; exchangePolicy?: string }) =>
+    request<{ settings: any }>("/settings", { method: "PUT", body: JSON.stringify(data) }),
 };

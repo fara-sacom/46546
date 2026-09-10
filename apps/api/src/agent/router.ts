@@ -57,6 +57,20 @@ export async function routeToolCall(toolName: string, input: unknown, ctx: ToolC
   const tool = getTool(toolName);
   if (!tool) throw new UnknownToolError(toolName);
 
+  if (ctx.allowedTools && ctx.allowedTools !== "all" && !ctx.allowedTools.includes(toolName)) {
+    const message = `هذه الأداة (${toolName}) خارج نطاق هذا المساعد المتخصص.`;
+    await writeAudit({
+      actorId: ctx.staffUserId,
+      actorLabel: ctx.actorLabel,
+      requestText: `${toolName}(${JSON.stringify(input ?? {})})`,
+      toolsUsed: [toolName],
+      tier: tool.tier,
+      result: "failed",
+      errorText: message,
+    });
+    return { status: "failed", tier: tool.tier, message };
+  }
+
   if (tool.tier === "ACTION") {
     const registryEntry = await prisma.toolRegistryEntry.upsert({
       where: { name: tool.name },

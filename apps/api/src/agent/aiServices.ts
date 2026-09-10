@@ -5,6 +5,8 @@ import { isTavilyConfigured } from "../integrations/search/tavily.js";
 import { isHuggingFaceConfigured } from "../integrations/image/huggingface.js";
 import { isRemoveBgConfigured } from "../integrations/image/removebg.js";
 import { isMetaConfigured, isTikTokConfigured, isSnapchatConfigured } from "../integrations/social/adPlatforms.js";
+import { isInstagramConfigured } from "../integrations/instagram/client.js";
+import { isTikTokCommentsConfigured } from "../integrations/tiktok/client.js";
 
 export interface AIServiceInfo {
   id: string;
@@ -53,6 +55,26 @@ export function listAIServices(): AIServiceInfo[] {
       envVar: "WHATSAPP_ACCESS_TOKEN",
       officialUrl: "https://developers.facebook.com/docs/whatsapp",
       configured: isWhatsAppConfigured(),
+    },
+    {
+      id: "instagram-messaging",
+      name: "Instagram Messaging (Meta Graph API)",
+      usedFor: "قراءة رسائل/تعليقات إنستغرام والرد عليها فعليًا (بعد موافقتك الصريحة)",
+      freeTier: "الواجهة نفسها مجانية؛ الإرسال بكميات كبيرة يحتاج موافقة Meta App Review على صلاحية instagram_business_manage_messages، وحد 200 رسالة تلقائية/ساعة لكل حساب",
+      requiresApiKey: true,
+      envVar: "META_PAGE_ACCESS_TOKEN + INSTAGRAM_BUSINESS_ACCOUNT_ID",
+      officialUrl: "https://developers.facebook.com/docs/messenger-platform/instagram",
+      configured: isInstagramConfigured(),
+    },
+    {
+      id: "tiktok-comments",
+      name: "TikTok for Business API (تعليقات)",
+      usedFor: "الرد الفعلي على تعليقات تيك توك (بعد موافقتك الصريحة)",
+      freeTier: "الواجهة البرمجية نفسها مجانية لحسابات الأعمال المرتبطة",
+      requiresApiKey: true,
+      envVar: "TIKTOK_ACCESS_TOKEN",
+      officialUrl: "https://business-api.tiktok.com/portal/docs",
+      configured: isTikTokCommentsConfigured(),
     },
     {
       id: "youtube",

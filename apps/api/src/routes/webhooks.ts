@@ -32,7 +32,9 @@ webhooksRouter.post("/webhooks/whatsapp", async (req, res) => {
 
     let conversation = await prisma.conversation.findFirst({ where: { channel: "WHATSAPP", customerRef: from, status: "open" } });
     if (!conversation) {
-      conversation = await prisma.conversation.create({ data: { channel: "WHATSAPP", customerRef: from, language: "ar" } });
+      conversation = await prisma.conversation.create({
+        data: { channel: "WHATSAPP", assistantType: "WHATSAPP", customerRef: from, language: "ar" },
+      });
     }
 
     await runAgentTurn(conversation.id, text, { actorLabel: `Customer via WhatsApp (${from})` });

@@ -34,6 +34,10 @@ export const env = {
     appSecret: optional("META_APP_SECRET"),
     pageAccessToken: optional("META_PAGE_ACCESS_TOKEN"),
     adAccountId: optional("META_AD_ACCOUNT_ID"),
+    // Instagram messaging (mساعد إنستغرام) reuses META_PAGE_ACCESS_TOKEN and
+    // just needs the connected IG Business Account id.
+    instagramBusinessAccountId: optional("INSTAGRAM_BUSINESS_ACCOUNT_ID"),
+    apiVersion: optional("META_API_VERSION") ?? "v20.0",
   },
 
   tiktok: {

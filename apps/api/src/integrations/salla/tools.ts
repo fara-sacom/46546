@@ -1,5 +1,5 @@
 import type { ToolDefinition } from "../../agent/types.js";
-import { products, inventory, orders, customers, categories, reviews, abandonedCarts, storePages, analytics } from "./api.js";
+import { products, inventory, orders, customers, categories, reviews, abandonedCarts, storePages, brandingAndTheme, analytics } from "./api.js";
 
 export const sallaTools: ToolDefinition[] = [
   // ---------------- READ ----------------
@@ -144,6 +144,22 @@ export const sallaTools: ToolDefinition[] = [
     handler: () => storePages.listMenus(),
   },
   {
+    name: "salla.branding.get",
+    integration: "salla",
+    tier: "READ",
+    description: "قراءة هوية المتجر الحالية (الشعار، الألوان، البيانات الوصفية) - للمساعد المتخصص بالتصميم",
+    inputSchema: { type: "object", properties: {} },
+    handler: () => brandingAndTheme.getBranding(),
+  },
+  {
+    name: "salla.theme.getSettings",
+    integration: "salla",
+    tier: "READ",
+    description: "قراءة إعدادات الثيم الحالية للمتجر (بما فيها أي أكواد CSS/JS مخصصة) - للمساعد المتخصص بالتصميم",
+    inputSchema: { type: "object", properties: {} },
+    handler: () => brandingAndTheme.getThemeSettings(),
+  },
+  {
     name: "salla.analytics.salesSummary",
     integration: "salla",
     tier: "READ",
@@ -269,5 +285,23 @@ export const sallaTools: ToolDefinition[] = [
     inputSchema: { type: "object", properties: { id: { type: "number" }, note: { type: "string" } }, required: ["id", "note"] },
     handler: (input) => orders.addHistoryNote(input.id, input.note),
     summarize: (input) => `إضافة ملاحظة لسجل الطلب #${input.id}`,
+  },
+  {
+    name: "salla.branding.update",
+    integration: "salla",
+    tier: "ACTION",
+    description: "تحديث هوية المتجر فعليًا (الشعار/الألوان/البيانات الوصفية) في سلة",
+    inputSchema: { type: "object", properties: { changes: { type: "object" } }, required: ["changes"] },
+    handler: (input) => brandingAndTheme.updateBranding(input.changes),
+    summarize: (input) => `تحديث هوية المتجر: ${JSON.stringify(input.changes)}`,
+  },
+  {
+    name: "salla.theme.updateSettings",
+    integration: "salla",
+    tier: "ACTION",
+    description: "تحديث إعدادات الثيم فعليًا (بما فيها أكواد CSS/JS مخصصة) في سلة",
+    inputSchema: { type: "object", properties: { changes: { type: "object" } }, required: ["changes"] },
+    handler: (input) => brandingAndTheme.updateThemeSettings(input.changes),
+    summarize: (input) => `تحديث إعدادات الثيم: ${JSON.stringify(input.changes)}`,
   },
 ];

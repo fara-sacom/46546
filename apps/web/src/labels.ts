@@ -51,11 +51,20 @@ export const INTEGRATION_LABEL: Record<string, string> = {
   mymemory: "الترجمة (MyMemory)",
   huggingface: "توليد الصور (Hugging Face)",
   removebg: "إزالة الخلفية (remove.bg)",
+  instagram: "رسائل إنستغرام",
+  tiktokComments: "تعليقات تيك توك",
 };
 
 export const LANGUAGE_LABEL: Record<string, string> = {
   ar: "عربي",
   en: "إنجليزي",
+};
+
+export const RESPONSE_STYLE_LABEL: Record<string, string> = {
+  SAUDI: "سعودي",
+  FUSHA: "فصحى",
+  ENGLISH: "إنجليزي",
+  AUTO: "تلقائي حسب لغة العميل",
 };
 
 export function tr(map: Record<string, string>, key: string): string {

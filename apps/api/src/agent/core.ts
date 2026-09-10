@@ -3,7 +3,9 @@ import { env } from "../env.js";
 import { prisma } from "../db.js";
 import { toClaudeToolSpecs } from "./toolRegistry.js";
 import { routeToolCall } from "./router.js";
-import { FARA_SYSTEM_PROMPT } from "./systemPrompt.js";
+import { FARA_BASE_PERSONA, buildResponseStyleDirective, CUSTOMER_POLICY_MISSING_NOTE } from "./systemPrompt.js";
+import { getAssistant } from "./assistants.js";
+import { getPlatformSettings } from "./settings.js";
 import type { ToolContext } from "./types.js";
 
 export class AgentNotConfiguredError extends Error {
@@ -30,6 +32,28 @@ export interface AgentTurnResult {
 export async function runAgentTurn(conversationId: string, userText: string, ctx: Omit<ToolContext, "conversationId">): Promise<AgentTurnResult> {
   const client = getAnthropic();
 
+  const conversation = await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } });
+  const assistant = getAssistant(conversation.assistantType);
+  const settings = await getPlatformSettings();
+
+  const policyBlock = assistant.customerFacing
+    ? [
+        "# سياسات المتجر المسجَّلة (استخدميها كما هي، لا تخترعي غيرها)",
+        `الشحن: ${settings.shippingPolicy?.trim() || CUSTOMER_POLICY_MISSING_NOTE}`,
+        `الدفع: ${settings.paymentPolicy?.trim() || CUSTOMER_POLICY_MISSING_NOTE}`,
+        `الاستبدال/الاسترجاع: ${settings.exchangePolicy?.trim() || CUSTOMER_POLICY_MISSING_NOTE}`,
+      ].join("\n")
+    : "";
+
+  const systemPrompt = [
+    FARA_BASE_PERSONA,
+    buildResponseStyleDirective(settings.responseStyle, assistant.customerFacing),
+    assistant.personaAddendum,
+    policyBlock,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
   await prisma.message.create({ data: { conversationId, role: "USER", content: userText } });
 
   const history = await prisma.message.findMany({
@@ -41,7 +65,7 @@ export async function runAgentTurn(conversationId: string, userText: string, ctx
     .filter((m) => m.role === "USER" || m.role === "ASSISTANT")
     .map((m) => ({ role: m.role === "USER" ? "user" : "assistant", content: m.content }));
 
-  const toolContext: ToolContext = { ...ctx, conversationId };
+  const toolContext: ToolContext = { ...ctx, conversationId, allowedTools: assistant.allowedTools };
   const toolCallsLog: AgentTurnResult["toolCalls"] = [];
 
   let rounds = 0;
@@ -52,8 +76,8 @@ export async function runAgentTurn(conversationId: string, userText: string, ctx
     const response = await client.messages.create({
       model: env.agentModel,
       max_tokens: 2048,
-      system: FARA_SYSTEM_PROMPT,
-      tools: toClaudeToolSpecs() as Anthropic.Tool[],
+      system: systemPrompt,
+      tools: toClaudeToolSpecs(assistant.allowedTools) as Anthropic.Tool[],
       messages,
     });
 

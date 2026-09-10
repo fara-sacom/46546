@@ -3,12 +3,17 @@ import { api } from "../api";
 import { CHANNEL_LABEL, LANGUAGE_LABEL, TOOL_CALL_STATUS_LABEL, tr } from "../labels";
 
 export default function Chat() {
+  const [assistants, setAssistants] = useState<any[]>([]);
+  const [newAssistantType, setNewAssistantType] = useState("PERSONAL");
   const [conversations, setConversations] = useState<any[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const activeConversation = conversations.find((c) => c.id === activeId);
+  const activeAssistantName = assistants.find((a) => a.id === activeConversation?.assistantType)?.name;
 
   async function refreshConversations() {
     const { conversations } = await api.conversations();
@@ -22,6 +27,7 @@ export default function Chat() {
   }
 
   useEffect(() => {
+    api.assistants().then((r) => setAssistants(r.assistants)).catch(() => setAssistants([]));
     refreshConversations().catch((e) => setError(e.message));
   }, []);
 
@@ -30,7 +36,7 @@ export default function Chat() {
   }, [activeId]);
 
   async function newConversation() {
-    const { conversation } = await api.createConversation({ channel: "DASHBOARD", language: "ar" });
+    const { conversation } = await api.createConversation({ channel: "DASHBOARD", assistantType: newAssistantType, language: "ar" });
     setConversations((c) => [conversation, ...c]);
     setActiveId(conversation.id);
     setMessages([]);
@@ -55,16 +61,24 @@ export default function Chat() {
 
   return (
     <div>
-      <div className="panel" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <button className="btn primary" onClick={newConversation}>محادثة جديدة</button>
-        <select
-          value={activeId ?? ""}
-          onChange={(e) => setActiveId(e.target.value)}
-          style={{ flex: 1, padding: 8, borderRadius: 8 }}
-        >
+      <div className="panel">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+          <select value={newAssistantType} onChange={(e) => setNewAssistantType(e.target.value)} style={{ padding: 8, borderRadius: 8 }}>
+            {assistants.map((a) => (
+              <option key={a.id} value={a.id} title={a.description}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+          <button className="btn primary" onClick={newConversation}>
+            محادثة جديدة
+          </button>
+        </div>
+        <select value={activeId ?? ""} onChange={(e) => setActiveId(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 8 }}>
           {conversations.map((c) => (
             <option key={c.id} value={c.id}>
-              {tr(CHANNEL_LABEL, c.channel)} · {tr(LANGUAGE_LABEL, c.language)} · {new Date(c.createdAt).toLocaleString("ar-SA")}
+              {assistants.find((a) => a.id === c.assistantType)?.name ?? c.assistantType} · {tr(CHANNEL_LABEL, c.channel)} ·{" "}
+              {tr(LANGUAGE_LABEL, c.language)} · {new Date(c.createdAt).toLocaleString("ar-SA")}
             </option>
           ))}
         </select>
@@ -74,6 +88,12 @@ export default function Chat() {
         <div className="panel" style={{ borderColor: "var(--danger)" }}>
           <strong>خطأ:</strong> {error}
         </div>
+      )}
+
+      {activeAssistantName && (
+        <p className="muted" style={{ marginTop: -8 }}>
+          تتحدثين الآن مع: <strong style={{ color: "var(--accent)" }}>{activeAssistantName}</strong>
+        </p>
       )}
 
       <div className="panel">

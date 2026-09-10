@@ -7,6 +7,7 @@ import Operations from "./pages/Operations";
 import AuditLog from "./pages/AuditLog";
 import Tools from "./pages/Tools";
 import AIServices from "./pages/AIServices";
+import Settings from "./pages/Settings";
 
 const TABS = [
   { id: "chat", label: "المحادثات" },
@@ -15,12 +16,14 @@ const TABS = [
   { id: "audit", label: "سجل التدقيق" },
   { id: "tools", label: "الأدوات" },
   { id: "ai-services", label: "خدمات الذكاء الاصطناعي" },
+  { id: "settings", label: "الإعدادات" },
 ];
 
 export default function App() {
   const [tab, setTab] = useState("chat");
   const [keyInput, setKeyInput] = useState(getStaffKey());
   const [health, setHealth] = useState<any>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => setHealth(null));
@@ -29,16 +32,32 @@ export default function App() {
   return (
     <div className="app">
       <aside className="sidebar">
-        <h1>FARA AI Agent</h1>
-        <div className="subtitle">وكيل متجر FARA STORE الذكي</div>
-        {TABS.map((t) => (
-          <button key={t.id} className={`nav-item ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)}>
-            {t.label}
+        <div className="sidebar-top">
+          <div>
+            <h1>FARA AI Agent</h1>
+            <div className="subtitle">منظومة مساعدين متجر FARA STORE الذكية</div>
+          </div>
+          <button className="menu-toggle" onClick={() => setMenuOpen((v) => !v)} aria-label="القائمة">
+            ☰
           </button>
-        ))}
+        </div>
+        <nav className={`nav-row ${menuOpen ? "open" : ""}`}>
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              className={`nav-item ${tab === t.id ? "active" : ""}`}
+              onClick={() => {
+                setTab(t.id);
+                setMenuOpen(false);
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
         <hr style={{ borderColor: "var(--border)", margin: "16px 0" }} />
         {health && (
-          <div style={{ fontSize: 12 }}>
+          <div className="health-panel">
             <div>
               الوكيل: <span className={`badge ${health.agentConfigured ? "ok" : "missing"}`}>{health.agentConfigured ? "مفعّل" : "بدون مفتاح"}</span>
             </div>
@@ -68,6 +87,7 @@ export default function App() {
         {tab === "audit" && <AuditLog />}
         {tab === "tools" && <Tools />}
         {tab === "ai-services" && <AIServices />}
+        {tab === "settings" && <Settings />}
       </main>
     </div>
   );

@@ -11,6 +11,8 @@ import { auditLogRouter } from "./routes/auditlog.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { aiServicesRouter } from "./routes/aiServices.js";
 import { assetsRouter } from "./routes/assets.js";
+import { assistantsRouter } from "./routes/assistants.js";
+import { settingsRouter } from "./routes/settings.js";
 
 export function createApp() {
   const app = express();
@@ -25,6 +27,8 @@ export function createApp() {
   app.use("/api", auditLogRouter);
   app.use("/api", aiServicesRouter);
   app.use("/api", assetsRouter);
+  app.use("/api", assistantsRouter);
+  app.use("/api", settingsRouter);
   app.use(webhooksRouter);
 
   app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

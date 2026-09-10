@@ -116,6 +116,18 @@ export const storePages = {
   listMenus: () => salla.get("/menus"),
 };
 
+// ---- Branding & theme (for the Design assistant). NOTE: Salla's public
+// Admin API v2 reference does not list a single canonical path for these two
+// resources the way it does for /products or /orders - these paths follow
+// Salla's own naming convention and should be double-checked against
+// https://docs.salla.dev/ before relying on them in production. ----
+export const brandingAndTheme = {
+  getBranding: () => salla.get("/store/branding"),
+  updateBranding: (payload: Record<string, unknown>) => salla.put("/store/branding", payload),
+  getThemeSettings: () => salla.get("/store/theme/settings"),
+  updateThemeSettings: (payload: Record<string, unknown>) => salla.put("/store/theme/settings", payload),
+};
+
 // ---- Computed analytics (built from documented endpoints; Salla's public
 // Admin API v2 has no dedicated "reports" resource, so FARA computes these
 // directly from real orders/products data rather than guessing an

@@ -49,6 +49,22 @@ enum Channel {
   YOUTUBE
 }
 
+enum AssistantType {
+  PERSONAL   // المساعد الشخصي - الأداة العامة لكل شيء يخص المتجر
+  CAMPAIGNS  // مساعد الحملات - تسويق وإعلانات
+  DESIGN     // مساعد تصميم المتجر والمواقع
+  INSTAGRAM  // مساعد الرد على إنستغرام
+  WHATSAPP   // مساعد الرد على واتساب
+  TIKTOK     // مساعد الرد على تيك توك
+}
+
+enum ResponseStyle {
+  SAUDI  // سعودي دائمًا
+  FUSHA  // فصحى دائمًا
+  ENGLISH // إنجليزي دائمًا
+  AUTO   // تلقائي حسب لغة/لهجة العميل (الافتراضي)
+}
+
 model StaffUser {
   id        String   @id @default(cuid())
   name      String
@@ -64,8 +80,9 @@ model StaffUser {
 }
 
 model Conversation {
-  id         String   @id @default(cuid())
-  channel    Channel  @default(DASHBOARD)
+  id            String        @id @default(cuid())
+  channel       Channel       @default(DASHBOARD)
+  assistantType AssistantType @default(PERSONAL)
   language   String   @default("ar") // "ar" (Saudi tone) | "en"
   customerRef String? // external customer id/phone/handle if applicable
   staffUserId String?
@@ -182,6 +199,18 @@ model IntegrationCredential {
   scopes     String?
   metadata   String?  // JSON, never store raw secrets here - secrets stay in env vars
   updatedAt  DateTime @updatedAt
+}
+
+// Singleton row (id is always "default"). Drives the agent's language/dialect
+// behavior and gives the customer-facing assistants real policy text instead
+// of letting them guess shipping/payment/exchange details.
+model PlatformSettings {
+  id             String        @id @default("default")
+  responseStyle  ResponseStyle @default(AUTO)
+  shippingPolicy String?
+  paymentPolicy  String?
+  exchangePolicy String?
+  updatedAt      DateTime      @updatedAt
 }
 
 model GeneratedAsset {

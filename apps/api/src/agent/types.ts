@@ -4,6 +4,8 @@ export interface ToolContext {
   conversationId?: string;
   staffUserId?: string;
   actorLabel: string;
+  /** Tool names the current assistant may use ("all" = no restriction). Enforced by the router as defense in depth. */
+  allowedTools?: string[] | "all";
 }
 
 export interface ToolDefinition {
