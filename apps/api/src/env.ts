@@ -12,6 +12,10 @@ export const env = {
   anthropicApiKey: optional("ANTHROPIC_API_KEY"),
   agentModel: optional("AGENT_MODEL") ?? "claude-sonnet-5",
 
+  store: {
+    bankTransferDetails: optional("STORE_BANK_TRANSFER_DETAILS"),
+  },
+
   salla: {
     accessToken: optional("SALLA_ACCESS_TOKEN"),
     baseUrl: optional("SALLA_API_BASE_URL") ?? "https://api.salla.dev/admin/v2",
