@@ -22,14 +22,14 @@ The real bridge is the FARA REST API (`apps/api` must actually be running, defau
      -d '{"text": "show me products at 5 units or fewer"}'
    ```
 3. Read the `reply` field — that's the real, live list from Salla, sorted lowest first. Don't reorder or filter it from memory.
-4. Every product in that list needs to go on the reorder list. **Where that list actually lives isn't wired up yet** — ask the user where they keep it (a spreadsheet, a note, Salla itself) rather than assuming a tool or file. Once that's answered, this skill and the workflow doc's "Access needed" section should be updated with the real one.
+4. The reorder list is a physical notebook page kept in the shop — there's nothing digital to write to here. Just hand the user (or read out) the exact list of flagged products so they can write it down themselves; don't claim to have added anything to the notebook.
 5. This skill only flags — it never changes stock quantities or reorders from a supplier itself. If asked to do either, say that's out of scope and point to the product-update workflow instead.
 6. If `apps/api` isn't reachable or Salla isn't configured, say so plainly instead of guessing which products are low.
 
 ## Access needed
 - FARA agent running (`npm run dev:api`) with a valid `X-FARA-Staff-Key` — the only real bridge to live Salla data from here.
 - Salla Admin API v2 configured in `apps/api/.env`.
-- The actual reorder list location — not yet named; ask before assuming one.
+- The reorder notebook — a physical page in the shop, not a digital tool. This skill only produces the list to write down; it never touches the notebook itself.
 
 ## When to use this
 - Weekly restock check, or "what's low on stock" / "what needs reordering."
