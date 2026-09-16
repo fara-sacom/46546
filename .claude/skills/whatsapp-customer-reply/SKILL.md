@@ -24,7 +24,7 @@ description: Draft and send a WhatsApp reply to a FARA STORE customer, following
      -H "Content-Type: application/json" \
      -d '{"text": "جهزي مسودة رد لاستفسار العميلة عن حالة طلبها رقم 10245"}'
    ```
-3. الوكيل الحقيقي (خلف هذا الـ endpoint) هو من يستعلم عبر أدوات READ ويجهّز المسودة عبر `whatsapp.draftReply` وفق قواعده الخاصة — النتيجة تعود في حقل `reply` من استجابة الطلب.
+3. الوكيل الحقيقي (خلف هذا الـ endpoint) هو من يستعلم عبر أدوات READ ويجهّز المسودة عبر `whatsapp.draftReply` وفق قواعده الخاصة — النتيجة تعود في حقل `reply` من استجابة الطلب. أسئلة السياسة (استبدال، شحن، دفع، كود خصم) يجيب عليها الوكيل من `support/knowledge/whatsapp-policy.md` (مضمَّن في system prompt الخاص به)، وليس من تخمينك أنتِ.
 4. لا تستدعي مسارًا يشغّل `whatsapp.sendMessage` (ACTION) نيابة عن الموظف بدون موافقته الصريحة أولًا — إن ظهر أن الوكيل أنشأ إجراء ACTION بانتظار الموافقة (`status: "pending_approval"` في الاستجابة)، أخبري المستخدم بوضوح أنه بانتظار موافقة ADMIN عبر لوحة التحكم أو `POST /api/actions/:id/approve`، ولا تدّعي أن الرسالة أُرسلت.
 5. إن لم تكن خدمة `apps/api` تعمل أو المفاتيح غير مضبوطة (`X-FARA-Staff-Key` غير صالح، أو `ANTHROPIC_API_KEY` غير مضبوط)، أخبري المستخدم بوضوح أن هذه المهارة غير قابلة للتنفيذ الآن بدل تخمين رد.
 
