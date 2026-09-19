@@ -71,6 +71,15 @@ model Conversation {
   staffUserId String?
   staffUser  StaffUser? @relation(fields: [staffUserId], references: [id])
   status     String   @default("open") // open | closed
+
+  // FARA-06 Human Escalation - minimal real signal (no dedicated table/queue/
+  // notification yet, that remains a known gap). Set only by the agent via the
+  // escalation.flagConversation tool (never inferred server-side), cleared only
+  // by staff via POST /api/conversations/:id/resolve-escalation.
+  escalated       Boolean   @default(false)
+  escalationReason String?
+  escalatedAt     DateTime?
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
