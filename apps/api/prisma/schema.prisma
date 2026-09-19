@@ -209,7 +209,7 @@ model OrderDraft {
   estimatedTotal Float?
   currency       String   @default("SAR")
   note           String?
-  status         String   @default("draft") // draft | reviewed | placed | discarded - actual order creation in Salla is a manual sales-team step, never automated here
+  status         String   @default("draft") // draft | confirmed | placed | discarded - "confirmed" is set only via salla.orders.confirmDraft after explicit customer approval; actual order creation in Salla ("placed") is a manual sales-team step, never automated here
   createdAt      DateTime @default(now())
 }
 
