@@ -1,6 +1,23 @@
 import type { ToolDefinition } from "../../agent/types.js";
-import { products, inventory, orders, customers, categories, reviews, abandonedCarts, storePages, analytics } from "./api.js";
+import { products, inventory, orders, customers, categories, reviews, abandonedCarts, storePages, analytics, type SallaProductVariant } from "./api.js";
 import { prisma } from "../../db.js";
+
+/** Real option values for a variant - Salla reports these under `options`; `option_values` is only a defensive fallback. */
+function variantOptionValues(v: SallaProductVariant): Array<{ value?: string }> {
+  return (v.options ?? v.option_values ?? []) as Array<{ value?: string }>;
+}
+
+/** Exact (case-insensitive) match against a variant's real option values only - never a SKU substring match, which can silently match the wrong size/color. */
+function variantMatchesValue(v: SallaProductVariant, needle: string): boolean {
+  return variantOptionValues(v).some((ov) => String(ov.value ?? "").trim().toLowerCase() === needle);
+}
+
+/** Absent/null quantity means Salla didn't report a count (e.g. an unlimited-stock SKU) - that's "unknown", never "out of stock". */
+function resolveVariantStock(v: SallaProductVariant, requestedQuantity = 1): { quantity: number | null; inStock: boolean | null } {
+  const quantity = typeof v.quantity === "number" ? v.quantity : null;
+  if (quantity === null) return { quantity: null, inStock: null };
+  return { quantity, inStock: quantity >= requestedQuantity };
+}
 
 export const sallaTools: ToolDefinition[] = [
   // ---------------- READ ----------------
@@ -71,24 +88,24 @@ export const sallaTools: ToolDefinition[] = [
     handler: async (input) => {
       const res = await products.getVariants(input.id);
       const needle = String(input.variant).trim().toLowerCase();
-      const matches = (res.data ?? []).filter(
-        (v) =>
-          (v.option_values ?? []).some((ov) => String(ov.value ?? "").trim().toLowerCase() === needle) ||
-          String(v.sku ?? "").toLowerCase().includes(needle)
-      );
+      const matches = (res.data ?? []).filter((v) => variantMatchesValue(v, needle));
       if (matches.length === 0) {
         return { found: false, message: `لا يوجد متغيّر مطابق لـ "${input.variant}" ضمن متغيرات هذا المنتج.` };
       }
       return {
         found: true,
-        variants: matches.map((v) => ({
-          id: v.id,
-          sku: v.sku,
-          quantity: v.quantity ?? 0,
-          inStock: (v.quantity ?? 0) > 0,
-          price: v.sale_price ?? v.price,
-          optionValues: v.option_values,
-        })),
+        variants: matches.map((v) => {
+          const stock = resolveVariantStock(v);
+          return {
+            id: v.id,
+            sku: v.sku,
+            quantity: stock.quantity,
+            inStock: stock.inStock,
+            note: stock.inStock === null ? "سلة لم تُرجع كمية محددة لهذا المتغيّر (قد يكون مخزونًا غير محدود) - لا تؤكدي التوفر أو عدمه للعميلة، تحققي يدويًا إن لزم." : undefined,
+            price: v.sale_price ?? v.price,
+            optionValues: variantOptionValues(v),
+          };
+        }),
       };
     },
   },
@@ -286,14 +303,12 @@ export const sallaTools: ToolDefinition[] = [
         if (item.variant) {
           const variantsRes = await products.getVariants(item.productId);
           const needle = String(item.variant).trim().toLowerCase();
-          const match = (variantsRes.data ?? []).find((v) =>
-            (v.option_values ?? []).some((ov) => String(ov.value ?? "").trim().toLowerCase() === needle)
-          );
+          const match = (variantsRes.data ?? []).find((v) => variantMatchesValue(v, needle));
           if (match) {
             variantMatched = true;
             unitPrice = match.sale_price ?? match.price ?? unitPrice;
             quantityAvailable = match.quantity ?? null;
-            variantInfo = { sku: match.sku, optionValues: match.option_values };
+            variantInfo = { sku: match.sku, optionValues: variantOptionValues(match) };
           }
         }
 
