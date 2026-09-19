@@ -1,5 +1,6 @@
 import type { ToolDefinition } from "../../agent/types.js";
 import { products, inventory, orders, customers, categories, reviews, abandonedCarts, storePages, analytics } from "./api.js";
+import { prisma } from "../../db.js";
 
 export const sallaTools: ToolDefinition[] = [
   // ---------------- READ ----------------
@@ -240,6 +241,99 @@ export const sallaTools: ToolDefinition[] = [
         before,
         proposed: input.changes,
         note: "هذا مقترح فقط ولم يُطبَّق على المتجر - يحتاج موافقة صريحة قبل التنفيذ عبر salla.products.update",
+      };
+    },
+  },
+  {
+    name: "salla.orders.prepareDraft",
+    integration: "salla",
+    tier: "DRAFT",
+    description:
+      "تجهيز مسودة طلب لعميلة تريد الشراء عبر واتساب (السعر والتوفر من بيانات سلة الحقيقية) - لا يُنشئ أي طلب فعلي في سلة أبدًا؛ إنشاء الطلب الفعلي عمل يدوي لفريق المبيعات عبر سلة (لا يوجد مسار سلّة/شحن/دفع فعلي عبر هذه الأداة)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        conversationId: { type: "string" },
+        customerRef: { type: "string", description: "رقم واتساب العميلة أو معرّفها، إن توفر" },
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              productId: { type: "number" },
+              variant: { type: "string", description: "قيمة الخيار المطلوب مثل M أو أحمر، اختياري" },
+              quantity: { type: "number" },
+            },
+            required: ["productId", "quantity"],
+          },
+        },
+        note: { type: "string" },
+      },
+      required: ["items"],
+    },
+    handler: async (input, ctx) => {
+      let estimatedTotal = 0;
+      let currency = "SAR";
+      const resolvedItems = [];
+      for (const item of input.items as Array<{ productId: number; variant?: string; quantity: number }>) {
+        const productRes = await products.get(item.productId);
+        const product = productRes.data;
+        let unitPrice = product.sale_price ?? product.price;
+        let quantityAvailable: number | null = product.quantity ?? null;
+        let variantMatched = false;
+        let variantInfo: unknown = null;
+
+        if (item.variant) {
+          const variantsRes = await products.getVariants(item.productId);
+          const needle = String(item.variant).trim().toLowerCase();
+          const match = (variantsRes.data ?? []).find((v) =>
+            (v.option_values ?? []).some((ov) => String(ov.value ?? "").trim().toLowerCase() === needle)
+          );
+          if (match) {
+            variantMatched = true;
+            unitPrice = match.sale_price ?? match.price ?? unitPrice;
+            quantityAvailable = match.quantity ?? null;
+            variantInfo = { sku: match.sku, optionValues: match.option_values };
+          }
+        }
+
+        const inStock = quantityAvailable == null ? null : quantityAvailable >= item.quantity;
+        if (unitPrice?.amount) {
+          estimatedTotal += unitPrice.amount * item.quantity;
+          currency = unitPrice.currency ?? currency;
+        }
+
+        resolvedItems.push({
+          productId: item.productId,
+          productName: product.name,
+          requestedVariant: item.variant ?? null,
+          variantMatched: item.variant ? variantMatched : null,
+          variantInfo,
+          quantity: item.quantity,
+          unitPrice,
+          quantityAvailable,
+          inStock,
+        });
+      }
+
+      const draft = await prisma.orderDraft.create({
+        data: {
+          conversationId: input.conversationId ?? ctx.conversationId,
+          customerRef: input.customerRef,
+          itemsJson: JSON.stringify(resolvedItems),
+          estimatedTotal,
+          currency,
+          note: input.note,
+        },
+      });
+
+      return {
+        draftId: draft.id,
+        status: draft.status,
+        items: resolvedItems,
+        estimatedTotal,
+        currency,
+        note: "هذا طلب مقترح فقط بناءً على بيانات سلة الحقيقية - لم يُنشأ أي طلب فعلي في سلة. سيتابع فريق المبيعات إنشاء الطلب الفعلي يدويًا.",
       };
     },
   },

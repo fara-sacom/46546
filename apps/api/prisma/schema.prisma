@@ -165,6 +165,18 @@ model CampaignDraft {
   createdAt   DateTime @default(now())
 }
 
+model OrderDraft {
+  id             String   @id @default(cuid())
+  conversationId String?
+  customerRef    String? // customer phone/handle, if known
+  itemsJson      String   // JSON array of resolved line items (productId, name, variant, quantity, unitPrice, inStock) - built from real Salla data
+  estimatedTotal Float?
+  currency       String   @default("SAR")
+  note           String?
+  status         String   @default("draft") // draft | reviewed | placed | discarded - actual order creation in Salla is a manual sales-team step, never automated here
+  createdAt      DateTime @default(now())
+}
+
 model CustomerReplyDraft {
   id             String   @id @default(cuid())
   conversationId String?
