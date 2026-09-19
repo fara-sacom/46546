@@ -33,7 +33,7 @@ docs/      → هذا المستند
 - **Social/Marketing** (`social/`): يوتيوب (قراءة حقيقية عبر YouTube Data API)، وMeta/TikTok/Snapchat Marketing APIs لتشغيل الحملات (ACTION فقط). `marketing.prepareCampaignBrief` (DRAFT) يجهّز فكرة/نص حملة دون نشر. `marketing.suggestAdCandidates` (READ) يحلّل بيانات مبيعات سلة الحقيقية لاقتراح منتجات للإعلان.
 
 ### 6. قاعدة البيانات (`apps/api/prisma/schema.prisma`)
-SQLite للتطوير (`DATABASE_URL=file:./prisma/dev.db`)، جاهزة للتحويل لـ Postgres بتغيير سطرين فقط (لا استخدام لأي نوع بيانات خاص بـ SQLite). الجداول: `StaffUser`, `Conversation`, `Message`, `ToolRegistryEntry`, `AgentAction`, `AuditLog`, `CampaignDraft`, `CustomerReplyDraft`, `IntegrationCredential`.
+SQLite للتطوير (`DATABASE_URL=file:./prisma/dev.db`)، جاهزة للتحويل لـ Postgres بتغيير سطرين فقط (لا استخدام لأي نوع بيانات خاص بـ SQLite). الجداول: `StaffUser`, `Conversation`, `Message`, `ToolRegistryEntry`, `AgentAction`, `AuditLog`, `CampaignDraft`, `CustomerReplyDraft`, `OrderDraft`, `CustomerContext`, `IntegrationCredential`.
 بيانات المنتجات/الطلبات/العملاء نفسها **لا تُخزَّن محليًا أبدًا** - تُقرأ مباشرة من سلة في كل مرة لضمان عدم وجود بيانات قديمة أو وهمية.
 
 ### 7. REST API (`apps/api/src/routes/*`)

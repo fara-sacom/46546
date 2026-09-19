@@ -165,6 +165,33 @@ model CampaignDraft {
   createdAt   DateTime @default(now())
 }
 
+// Cross-conversation customer memory - the gap noted in
+// support/knowledge/whatsapp-policy.md #12: a `Conversation`'s Message
+// history only covers messages within that single (open) conversation.
+// Once a conversation closes and a returning customer opens a new one,
+// this is what lets FARA recall her last known intent/product/order
+// instead of starting blank. Structural fields (customerId, whatsappNumber,
+// conversationId, lastMessage, language, timestamps) are kept in sync
+// automatically on every inbound WhatsApp message (routes/webhooks.ts) -
+// never dependent on the agent remembering to call a tool. The
+// interpretive fields (currentIntent, cartContext, lastProduct, lastOrder)
+// are only ever set by the agent explicitly via memory.updateCustomerContext,
+// never inferred/guessed server-side.
+model CustomerContext {
+  id             String   @id @default(cuid())
+  customerId     String   @unique // internal customer key - for WhatsApp today this is the same value as whatsappNumber
+  whatsappNumber String?  @unique
+  conversationId String? // most recent conversation for this customer
+  lastMessage    String? // last inbound message text, for quick reference
+  language       String? // ar | en, from the most recent message
+  currentIntent  String? // product_price | check_inventory | order_status | create_order | search_products
+  cartContext    String? // JSON: items the customer is currently discussing/considering (not yet an OrderDraft)
+  lastProduct    String? // JSON: {productId, name, sku} of the last product discussed
+  lastOrder      String? // JSON: {orderId, referenceId, status} of the last order discussed
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
 model OrderDraft {
   id             String   @id @default(cuid())
   conversationId String?
