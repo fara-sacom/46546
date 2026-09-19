@@ -41,6 +41,24 @@ export async function runAgentTurn(conversationId: string, userText: string, ctx
     .filter((m) => m.role === "USER" || m.role === "ASSISTANT")
     .map((m) => ({ role: m.role === "USER" ? "user" : "assistant", content: m.content }));
 
+  // Cross-conversation memory: if this customer talked to FARA before in a
+  // now-closed conversation, her last known intent/product/order still
+  // carries over instead of starting blank. Always for-reference only -
+  // the agent must still verify via Salla tools before confirming anything.
+  const conversation = await prisma.conversation.findUnique({ where: { id: conversationId } });
+  let memoryNote = "";
+  if (conversation?.customerRef) {
+    const memory = await prisma.customerContext.findUnique({ where: { whatsappNumber: conversation.customerRef } });
+    if (memory && (memory.currentIntent || memory.lastProduct || memory.lastOrder || memory.cartContext)) {
+      memoryNote =
+        "\n\n# سياق سابق لهذه العميلة (من محادثة سابقة - للاستئناس فقط، تحققي دائمًا من سلة قبل أي تأكيد)\n" +
+        (memory.currentIntent ? `- آخر نية معروفة: ${memory.currentIntent}\n` : "") +
+        (memory.lastProduct ? `- آخر منتج تم التطرق له: ${memory.lastProduct}\n` : "") +
+        (memory.lastOrder ? `- آخر طلب تم التطرق له: ${memory.lastOrder}\n` : "") +
+        (memory.cartContext ? `- سلة الاهتمام الحالية: ${memory.cartContext}\n` : "");
+    }
+  }
+
   const toolContext: ToolContext = { ...ctx, conversationId };
   const toolCallsLog: AgentTurnResult["toolCalls"] = [];
 
@@ -52,7 +70,7 @@ export async function runAgentTurn(conversationId: string, userText: string, ctx
     const response = await client.messages.create({
       model: env.agentModel,
       max_tokens: 2048,
-      system: FARA_SYSTEM_PROMPT,
+      system: FARA_SYSTEM_PROMPT + memoryNote,
       tools: toClaudeToolSpecs() as Anthropic.Tool[],
       messages,
     });
