@@ -47,6 +47,51 @@ export const sallaTools: ToolDefinition[] = [
     handler: (input) => products.getBySku(input.sku),
   },
   {
+    name: "salla.products.getVariants",
+    integration: "salla",
+    tier: "READ",
+    description: "قراءة متغيرات منتج (كل تركيبة مقاس/لون) مع السعر والمخزون الحقيقي لكل متغيّر على حدة - استخدميها قبل تأكيد توفر مقاس/لون معيّن للعميلة",
+    inputSchema: { type: "object", properties: { id: { type: "number", description: "معرّف المنتج" } }, required: ["id"] },
+    handler: (input) => products.getVariants(input.id),
+  },
+  {
+    name: "salla.inventory.checkVariant",
+    integration: "salla",
+    tier: "READ",
+    description: "التحقق من توفر مخزون متغيّر محدد لمنتج (مثال: مقاس M أو لون أحمر) بمطابقة قيمة الخيار ضمن متغيرات المنتج الحقيقية من سلة - لا تفترضي التوفر أبدًا، استعلمي بهذه الأداة",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "number", description: "معرّف المنتج" },
+        variant: { type: "string", description: "قيمة الخيار المطلوب التحقق من توفره، مثل M أو أحمر" },
+      },
+      required: ["id", "variant"],
+    },
+    handler: async (input) => {
+      const res = await products.getVariants(input.id);
+      const needle = String(input.variant).trim().toLowerCase();
+      const matches = (res.data ?? []).filter(
+        (v) =>
+          (v.option_values ?? []).some((ov) => String(ov.value ?? "").trim().toLowerCase() === needle) ||
+          String(v.sku ?? "").toLowerCase().includes(needle)
+      );
+      if (matches.length === 0) {
+        return { found: false, message: `لا يوجد متغيّر مطابق لـ "${input.variant}" ضمن متغيرات هذا المنتج.` };
+      }
+      return {
+        found: true,
+        variants: matches.map((v) => ({
+          id: v.id,
+          sku: v.sku,
+          quantity: v.quantity ?? 0,
+          inStock: (v.quantity ?? 0) > 0,
+          price: v.sale_price ?? v.price,
+          optionValues: v.option_values,
+        })),
+      };
+    },
+  },
+  {
     name: "salla.inventory.list",
     integration: "salla",
     tier: "READ",

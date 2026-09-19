@@ -14,6 +14,16 @@ export interface SallaProduct {
   [k: string]: unknown;
 }
 
+export interface SallaProductVariant {
+  id: number;
+  sku?: string | null;
+  price?: { amount: number; currency: string };
+  sale_price?: { amount: number; currency: string } | null;
+  quantity?: number | null;
+  option_values?: Array<{ id?: number; name?: string; value?: string }>;
+  [k: string]: unknown;
+}
+
 export interface SallaOrder {
   id: number;
   reference_id?: number;
@@ -50,6 +60,9 @@ export const products = {
     salla.get<Paginated<SallaProduct>>("/products", { ...params, keyword }),
 
   getBySku: (sku: string) => salla.get<Paginated<SallaProduct>>("/products", { sku }),
+
+  /** Real per-variant (size/color combination) price & stock, straight from Salla - never guessed from the parent product's `options`. */
+  getVariants: (id: number) => salla.get<Paginated<SallaProductVariant>>(`/products/${id}/skus`),
 
   create: (payload: Record<string, unknown>) => salla.post<{ data: SallaProduct }>("/products", payload),
 
