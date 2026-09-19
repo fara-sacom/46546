@@ -266,7 +266,7 @@ export const sallaTools: ToolDefinition[] = [
     integration: "salla",
     tier: "DRAFT",
     description:
-      "تجهيز مسودة طلب لعميلة تريد الشراء عبر واتساب (السعر والتوفر من بيانات سلة الحقيقية) - لا يُنشئ أي طلب فعلي في سلة أبدًا؛ إنشاء الطلب الفعلي عمل يدوي لفريق المبيعات عبر سلة (لا يوجد مسار سلّة/شحن/دفع فعلي عبر هذه الأداة)",
+      "تجهيز مسودة طلب/سلة لعميلة تريد الشراء عبر واتساب (السعر والتوفر من بيانات سلة الحقيقية) - لا يُنشئ أي طلب فعلي في سلة أبدًا، ولا يُنشئ رابط دفع مباشر. يعيد لكل منتج رابط صفحته الحقيقي في المتجر (productUrl) لترسليه للعميلة كي تختار مقاسها وتُتم الدفع بنفسها عبر checkout سلة الفعلي؛ إنشاء الطلب الفعلي في النظام يبقى عمل يدوي لفريق المبيعات",
     inputSchema: {
       type: "object",
       properties: {
@@ -328,6 +328,9 @@ export const sallaTools: ToolDefinition[] = [
           unitPrice,
           quantityAvailable,
           inStock,
+          // Real Salla storefront link (never a fabricated cart/payment-link API call) -
+          // the customer picks her size and pays through Salla's actual checkout herself.
+          productUrl: product.urls?.customer ?? null,
         });
       }
 
@@ -348,7 +351,7 @@ export const sallaTools: ToolDefinition[] = [
         items: resolvedItems,
         estimatedTotal,
         currency,
-        note: "هذا طلب مقترح فقط بناءً على بيانات سلة الحقيقية - لم يُنشأ أي طلب فعلي في سلة. سيتابع فريق المبيعات إنشاء الطلب الفعلي يدويًا.",
+        note: "هذا طلب مقترح فقط بناءً على بيانات سلة الحقيقية - لم يُنشأ أي طلب فعلي في سلة ولا رابط دفع مباشر. أرسلي للعميلة productUrl الحقيقي لكل منتج لتُتم اختيار المقاس والدفع بنفسها، أو انتظري متابعة فريق المبيعات لإتمام الطلب.",
       };
     },
   },
