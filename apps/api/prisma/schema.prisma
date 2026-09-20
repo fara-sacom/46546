@@ -201,16 +201,30 @@ model CustomerContext {
   updatedAt      DateTime @updatedAt
 }
 
+// Order lifecycle: draft -> confirmed -> readyForPlacement -> placed
+//                                              \-> executionBlocked (re-check failed at approval time)
+// Real Salla order creation has NO API surface at all (confirmed against the
+// live s_salla_sa Salla tool set - no create/checkout/cart-create endpoint
+// exists for merchant apps; order creation is a customer-only storefront
+// action on Salla's side). "placed" therefore only ever records a REAL Salla
+// order id/number a staff member entered by hand after creating it themselves
+// in Salla - this system never creates or claims to create that order.
 model OrderDraft {
-  id             String   @id @default(cuid())
-  conversationId String?
-  customerRef    String? // customer phone/handle, if known
-  itemsJson      String   // JSON array of resolved line items (productId, name, variant, quantity, unitPrice, inStock) - built from real Salla data
-  estimatedTotal Float?
-  currency       String   @default("SAR")
-  note           String?
-  status         String   @default("draft") // draft | confirmed | placed | discarded - "confirmed" is set only via salla.orders.confirmDraft after explicit customer approval; actual order creation in Salla ("placed") is a manual sales-team step, never automated here
-  createdAt      DateTime @default(now())
+  id                     String    @id @default(cuid())
+  conversationId         String?
+  customerRef            String? // customer phone/handle, if known
+  itemsJson              String    // JSON array of resolved line items (productId, name, variant, quantity, unitPrice, inStock) - built from real Salla data
+  estimatedTotal         Float?
+  currency               String    @default("SAR")
+  paymentMethod          String?   // only ever set from what the customer actually said, never invented
+  shippingAddress        String?   // same - free text, only if the customer actually provided one
+  note                   String?
+  status                 String    @default("draft") // draft | confirmed | readyForPlacement | executionBlocked | placed | discarded
+  executionBlockedReason String?   // set when salla.orders.requestExecution's re-check fails (price/stock changed since confirmation)
+  sallaOrderId           Int?      // the REAL Salla order id, entered by staff only after they placed it themselves in Salla
+  sallaReferenceId       Int?
+  placedAt               DateTime?
+  createdAt              DateTime  @default(now())
 }
 
 model CustomerReplyDraft {

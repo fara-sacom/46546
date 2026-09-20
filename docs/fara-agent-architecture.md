@@ -45,11 +45,14 @@ SQLite للتطوير (`DATABASE_URL=file:./prisma/dev.db`)، جاهزة للت�
 | `GET /api/tools` | سجل الأدوات وصلاحياتها |
 | `GET/POST /api/conversations` | قائمة/إنشاء محادثة |
 | `GET /api/conversations/:id/messages` | رسائل محادثة |
+| `POST /api/conversations/:id/resolve-escalation` | إزالة علامة التصعيد (FARA-06) بعد متابعة موظف فعليًا |
 | `POST /api/conversations/:id/chat` | إرسال رسالة للوكيل وتشغيل دورة التخطيط/الأدوات |
-| `GET /api/actions/pending` | الإجراءات بانتظار الموافقة |
+| `GET /api/actions/pending` | الإجراءات بانتظار الموافقة (يشمل `salla.orders.requestExecution`) |
 | `GET /api/actions?status=` | كل الإجراءات (سجل العمليات) |
 | `POST /api/actions/:id/approve` | موافقة وتنفيذ فعلي (ADMIN) |
 | `POST /api/actions/:id/reject` | رفض (ADMIN) |
+| `GET /api/order-drafts?status=` | مسودات الطلبات (تصفية بالحالة، مثل `readyForPlacement`) |
+| `POST /api/order-drafts/:id/record-salla-order` | تسجيل رقم الطلب الحقيقي بعد إنشائه يدويًا في سلة - يحوّل الحالة إلى `placed` |
 | `GET /api/audit-log` | سجل التدقيق الكامل |
 | `GET/POST /webhooks/whatsapp` | تحقق واتساب + استقبال رسائل العملاء |
 

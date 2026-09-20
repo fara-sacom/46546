@@ -5,6 +5,7 @@ import { syncToolRegistry } from "./agent/toolRegistry.js";
 import { healthRouter } from "./routes/health.js";
 import { toolsRouter } from "./routes/tools.js";
 import { conversationsRouter } from "./routes/conversations.js";
+import { orderDraftsRouter } from "./routes/orderDrafts.js";
 import { chatRouter } from "./routes/chat.js";
 import { actionsRouter } from "./routes/actions.js";
 import { auditLogRouter } from "./routes/auditlog.js";
@@ -18,6 +19,7 @@ export function createApp() {
   app.use("/api", healthRouter);
   app.use("/api", toolsRouter);
   app.use("/api", conversationsRouter);
+  app.use("/api", orderDraftsRouter);
   app.use("/api", chatRouter);
   app.use("/api", actionsRouter);
   app.use("/api", auditLogRouter);

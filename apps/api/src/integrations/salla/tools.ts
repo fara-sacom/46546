@@ -275,6 +275,38 @@ export const sallaTools: ToolDefinition[] = [
     },
     handler: (input) => analytics.lowStockProducts(input?.threshold),
   },
+  {
+    name: "salla.orders.checkDraftStatus",
+    integration: "salla",
+    tier: "READ",
+    description:
+      "قراءة الحالة الفعلية الحالية لمسودة طلب - استدعيها دائمًا قبل إخبار العميلة بأي نتيجة نهائية عن طلبها. لا تُخبري العميلة أن طلبها 'تم إنشاؤه' أو أعطيها رقم طلب إلا إذا كانت الحالة المُعادة هنا placed ومعها sallaOrderId حقيقي - لا تفترضي ولا تخترعي رقم طلب أبدًا، ولا تعتمدي على الذاكرة من رسائل سابقة.",
+    inputSchema: {
+      type: "object",
+      properties: { draftId: { type: "string", description: "اختياري - إن تُرك فارغًا تُستخدم أحدث مسودة لهذه المحادثة" } },
+    },
+    handler: async (input, ctx) => {
+      const draft = input.draftId
+        ? await prisma.orderDraft.findUnique({ where: { id: input.draftId } })
+        : ctx.conversationId
+          ? await prisma.orderDraft.findFirst({ where: { conversationId: ctx.conversationId }, orderBy: { createdAt: "desc" } })
+          : null;
+
+      if (!draft) return { found: false };
+
+      return {
+        found: true,
+        draftId: draft.id,
+        status: draft.status,
+        executionBlockedReason: draft.executionBlockedReason,
+        sallaOrderId: draft.sallaOrderId,
+        sallaReferenceId: draft.sallaReferenceId,
+        placedAt: draft.placedAt,
+        estimatedTotal: draft.estimatedTotal,
+        currency: draft.currency,
+      };
+    },
+  },
 
   // ---------------- DRAFT (no external effect) ----------------
   {
@@ -327,6 +359,8 @@ export const sallaTools: ToolDefinition[] = [
             required: ["productId", "quantity"],
           },
         },
+        paymentMethod: { type: "string", description: "طريقة الدفع كما ذكرتها العميلة حرفيًا (مثل: تحويل بنكي، عند الاستلام) - اتركيه فارغًا إن لم تذكرها، لا تخترعي طريقة" },
+        shippingAddress: { type: "string", description: "عنوان الشحن كما ذكرته العميلة حرفيًا - اتركيه فارغًا إن لم تذكره، لا تخترعي عنوانًا" },
         note: { type: "string" },
       },
       required: ["items"],
@@ -351,6 +385,8 @@ export const sallaTools: ToolDefinition[] = [
           itemsJson: JSON.stringify(resolvedItems),
           estimatedTotal,
           currency,
+          paymentMethod: input.paymentMethod,
+          shippingAddress: input.shippingAddress,
           note: input.note,
         },
       });
@@ -430,7 +466,7 @@ export const sallaTools: ToolDefinition[] = [
       }
 
       const updated = await prisma.orderDraft.update({
-        where: { id: input.draftId },
+        where: { id: draft.id },
         data: { status: "confirmed" },
       });
 
@@ -445,6 +481,87 @@ export const sallaTools: ToolDefinition[] = [
   },
 
   // ---------------- ACTION (requires explicit human approval) ----------------
+  {
+    name: "salla.orders.requestExecution",
+    integration: "salla",
+    tier: "ACTION",
+    description:
+      "طلب تنفيذ طلب مؤكَّد من العميلة - يحتاج موافقة موظف ADMIN صريحة. لا تستدعيها إلا على مسودة بحالة confirmed (بعد salla.orders.confirmDraft). ملاحظة مهمة وحقيقية: سلة لا توفر أي endpoint لإنشاء طلب عبر API للتجار على الإطلاق (تحقّقنا من كامل سطح Salla API الحقيقي) - هذه الأداة لا تُنشئ طلبًا فعليًا في سلة أبدًا ولا يمكنها ذلك. عند موافقة الموظف، تُعاد التحقق من السعر والمخزون الحقيقيين لحظة الموافقة نفسها (قد يكون تغيّر شيء بين تأكيد العميلة وموافقة الموظف) - إن تغيّر شيء تفشل العملية بسبب واضح ولا تستمر ببيانات قديمة. عند النجاح تنتقل المسودة لحالة readyForPlacement مع كل البيانات المتاحة (منتج، مقاس، كمية، سعر، بيانات العميلة، طريقة الدفع، عنوان الشحن) ليُنشئ فريق المبيعات الطلب الفعلي بنفسه يدويًا في سلة، ثم يسجّل رقم الطلب الحقيقي عبر POST /api/order-drafts/:id/record-salla-order.",
+    inputSchema: {
+      type: "object",
+      properties: { draftId: { type: "string", description: "اختياري - إن تُرك فارغًا تُستخدم أحدث مسودة confirmed لهذه المحادثة" } },
+    },
+    handler: async (input, ctx) => {
+      const draft = input.draftId
+        ? await prisma.orderDraft.findUnique({ where: { id: input.draftId } })
+        : ctx.conversationId
+          ? await prisma.orderDraft.findFirst({
+              where: { conversationId: ctx.conversationId, status: "confirmed" },
+              orderBy: { createdAt: "desc" },
+            })
+          : null;
+
+      if (!draft) {
+        throw new Error(
+          input.draftId
+            ? "مسودة الطلب غير موجودة"
+            : "لا توجد مسودة طلب مؤكدة بانتظار التنفيذ لهذه المحادثة - يجب تأكيدها أولًا عبر salla.orders.confirmDraft"
+        );
+      }
+      if (draft.status !== "confirmed") {
+        throw new Error(`لا يمكن طلب تنفيذ مسودة بحالة "${draft.status}" - يجب أن تكون بحالة confirmed`);
+      }
+
+      const originalItems = JSON.parse(draft.itemsJson) as Array<{
+        productId: number;
+        requestedVariant: string | null;
+        quantity: number;
+        unitPrice?: { amount: number; currency: string };
+      }>;
+
+      const recheck = [];
+      let stillValid = true;
+
+      for (const original of originalItems) {
+        const resolved = await resolveOrderItem({
+          productId: original.productId,
+          variant: original.requestedVariant,
+          quantity: original.quantity,
+        });
+        const priceChangedSinceConfirm = resolved.unitPrice?.amount !== original.unitPrice?.amount;
+        const noLongerAvailable = (Boolean(original.requestedVariant) && !resolved.variantMatched) || resolved.inStock === false;
+        if (priceChangedSinceConfirm || noLongerAvailable) stillValid = false;
+        recheck.push({ ...resolved, priceChangedSinceConfirm, noLongerAvailable });
+      }
+
+      if (!stillValid) {
+        await prisma.orderDraft.update({
+          where: { id: draft.id },
+          data: { status: "executionBlocked", executionBlockedReason: "تغيّر السعر أو التوفر بين تأكيد العميلة وموافقة الموظف" },
+        });
+        throw new Error("تغيّر السعر أو التوفر منذ تأكيد العميلة - تم إيقاف التنفيذ بدل المضي ببيانات قديمة. أخبري العميلة بالفرق الفعلي.");
+      }
+
+      const updated = await prisma.orderDraft.update({
+        where: { id: draft.id },
+        data: { status: "readyForPlacement" },
+      });
+
+      return {
+        readyForPlacement: true,
+        draftId: updated.id,
+        status: updated.status,
+        items: recheck,
+        estimatedTotal: draft.estimatedTotal,
+        currency: draft.currency,
+        customerRef: draft.customerRef,
+        paymentMethod: draft.paymentMethod,
+        shippingAddress: draft.shippingAddress,
+        note: "لا يوجد طلب فعلي في سلة بعد - سلة لا توفر إنشاء طلب عبر API إطلاقًا. على فريق المبيعات إنشاء الطلب يدويًا في سلة بهذه البيانات، ثم تسجيل رقم الطلب الحقيقي عبر POST /api/order-drafts/:id/record-salla-order.",
+      };
+    },
+    summarize: (input) => `طلب تنفيذ (تسليم لفريق المبيعات) لمسودة الطلب ${input.draftId ?? "(الأحدث المؤكدة لهذه المحادثة)"}`,
+  },
   {
     name: "salla.products.update",
     integration: "salla",
