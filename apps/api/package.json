@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "lint": "tsc --noEmit",
     "test": "vitest run",
+    "test:salla": "vitest run --config vitest.salla.config.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev --name init",
     "db:push": "prisma db push",

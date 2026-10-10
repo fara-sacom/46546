@@ -12,9 +12,12 @@ function variantMatchesValue(v: SallaProductVariant, needle: string): boolean {
   return variantOptionValues(v).some((ov) => String(ov.value ?? "").trim().toLowerCase() === needle);
 }
 
-/** Absent/null quantity means Salla didn't report a count (e.g. an unlimited-stock SKU) - that's "unknown", never "out of stock". */
+/** Explicit availability takes precedence; an unlimited SKU has no finite stock count. */
 function resolveVariantStock(v: SallaProductVariant, requestedQuantity = 1): { quantity: number | null; inStock: boolean | null } {
-  const quantity = typeof v.quantity === "number" ? v.quantity : null;
+  const quantity = v.unlimited_quantity === true ? null : typeof v.quantity === "number" && Number.isFinite(v.quantity) ? v.quantity : null;
+  if (v.availability === false) return { quantity, inStock: false };
+  if (v.unlimited_quantity === true) return { quantity, inStock: true };
+  if (v.availability === true && requestedQuantity === 1) return { quantity, inStock: true };
   if (quantity === null) return { quantity: null, inStock: null };
   return { quantity, inStock: quantity >= requestedQuantity };
 }
@@ -125,15 +128,20 @@ export const sallaTools: ToolDefinition[] = [
       properties: {
         id: { type: "number", description: "معرّف المنتج" },
         variant: { type: "string", description: "قيمة الخيار المطلوب التحقق من توفره، مثل M أو أحمر" },
+        sku: { type: "string", description: "SKU كامل ودقيق للمتغيّر؛ يمكن استخدامه وحده أو لتقييد مطابقة الخيار" },
       },
-      required: ["id", "variant"],
+      required: ["id"],
+      anyOf: [{ required: ["variant"] }, { required: ["sku"] }],
     },
     handler: async (input) => {
+      const needle = typeof input.variant === "string" ? input.variant.trim().toLowerCase() : "";
+      const sku = typeof input.sku === "string" ? input.sku.trim() : "";
+      if (!needle && !sku) throw new Error("Provide a non-empty variant or exact SKU");
       const res = await products.getVariants(input.id);
-      const needle = String(input.variant).trim().toLowerCase();
-      const matches = (res.data ?? []).filter((v) => variantMatchesValue(v, needle));
+      const matches = (res.data ?? []).filter((v) =>
+        (!needle || variantMatchesValue(v, needle)) && (!sku || v.sku === sku));
       if (matches.length === 0) {
-        return { found: false, message: `لا يوجد متغيّر مطابق لـ "${input.variant}" ضمن متغيرات هذا المنتج.` };
+        return { found: false, message: `لا يوجد متغيّر مطابق لـ "${input.variant ?? sku}" ضمن متغيرات هذا المنتج.` };
       }
       return {
         found: true,

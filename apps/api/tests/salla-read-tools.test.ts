@@ -11,6 +11,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 const { mockGet } = vi.hoisted(() => ({ mockGet: vi.fn() }));
 
+// Read-only Salla tools do not use the database.
+vi.mock("../src/db.js", () => ({ prisma: {} }));
+
 vi.mock("../src/integrations/salla/client.js", () => ({
   salla: { get: mockGet, post: vi.fn(), put: vi.fn(), del: vi.fn() },
   isSallaConfigured: () => true,
@@ -66,6 +69,74 @@ describe("Phase 1 read tools against realistic mocked Salla responses", () => {
   // test would see call history accumulated from earlier tests too.
   beforeEach(() => {
     mockGet.mockReset();
+  });
+
+  it("matches normalized size and Arabic color from options, ignoring legacy values", async () => {
+    const variant = { id: 1, sku: "MG3242-M-RED", quantity: 2,
+      options: [{ name: "المقاس", value: "M" }, { name: "اللون", value: "أحمر" }],
+      option_values: [{ value: "L" }] };
+    for (const value of [" m ", "أحمر", "L", "المقاس"]) {
+      mockGet.mockResolvedValueOnce({ data: [variant] });
+      const result: any = await tool("salla.inventory.checkVariant").handler({ id: 501, variant: value }, ctx);
+      expect(result.found).toBe(value === " m " || value === "أحمر");
+    }
+  });
+
+  it("requires an explicit exact SKU and can combine it with an option filter", async () => {
+    const variants = [...VARIANTS_PAGE_1, { ...VARIANTS_PAGE_1[1], id: 9004, sku: "MG3242-M-BLUE" }];
+    for (const input of [
+      { sku: "MG3242-M" }, { sku: "MG3242" }, { sku: "M" },
+      { variant: "MG3242-M" }, { sku: "MG3242-M", variant: "S" },
+    ]) {
+      mockGet.mockResolvedValueOnce({ data: variants });
+      const result: any = await tool("salla.inventory.checkVariant").handler({ id: 501, ...input }, ctx);
+      expect(result.found).toBe(input.sku === "MG3242-M" && !input.variant);
+      if (result.found) expect(result.variants.map((v: any) => v.id)).toEqual([9002]);
+    }
+    await expect(tool("salla.inventory.checkVariant").handler({ id: 501, variant: " " }, ctx)).rejects.toThrow("non-empty");
+  });
+
+  it.each([
+    [{ unlimited_quantity: true }, null, true],
+    [{ unlimited_quantity: true, quantity: 0 }, null, true],
+    [{ availability: true }, null, true],
+    [{ availability: true, quantity: 0 }, 0, true],
+    [{ availability: false, quantity: 5 }, 5, false],
+    [{ availability: false, unlimited_quantity: true }, null, false],
+    [{ quantity: 0 }, 0, false],
+    [{ quantity: null }, null, null],
+  ])("honors SKU stock signals %j", async (signals, quantity, inStock) => {
+    mockGet.mockResolvedValueOnce({ data: [{ id: 1, options: [{ value: "M" }], ...signals }] });
+    const result: any = await tool("salla.inventory.checkVariant").handler({ id: 501, variant: "M" }, ctx);
+    expect(result.variants[0]).toMatchObject({ quantity, inStock });
+  });
+
+  it("finds a variant after page 20 without silently truncating SKUs", async () => {
+    mockGet.mockImplementation(async (_path, params) => ({
+      data: params.page === 21 ? VARIANTS_PAGE_1 : [],
+      pagination: { currentPage: params.page, totalPages: 21 },
+    }));
+    const result: any = await tool("salla.inventory.checkVariant").handler({ id: 501, variant: "M" }, ctx);
+    expect(result.variants[0].id).toBe(9002);
+    expect(mockGet).toHaveBeenCalledTimes(21);
+  });
+
+  it("propagates later-page failures instead of returning an incomplete stock answer", async () => {
+    mockGet.mockResolvedValueOnce({ data: VARIANTS_PAGE_1, pagination: { totalPages: 2 } })
+      .mockRejectedValueOnce(new Error("Salla timeout"));
+    await expect(tool("salla.inventory.checkVariant").handler({ id: 501, variant: "L" }, ctx)).rejects.toThrow("Salla timeout");
+  });
+
+  it("rejects invalid pagination instead of declaring no match", async () => {
+    mockGet.mockResolvedValueOnce({ data: [], pagination: { totalPages: "2" } });
+    await expect(tool("salla.inventory.checkVariant").handler({ id: 501, variant: "M" }, ctx)).rejects.toThrow("invalid SKU pagination");
+  });
+
+  it("accepts an empty SKU collection with zero pages", async () => {
+    mockGet.mockResolvedValueOnce({ data: [], pagination: { totalPages: 0 } });
+    const result: any = await tool("salla.inventory.checkVariant").handler({ id: 501, variant: "M" }, ctx);
+    expect(result.found).toBe(false);
+    expect(mockGet).toHaveBeenCalledTimes(1);
   });
 
   it("salla.products.search returns real product data (name/price/sku) from Salla's shape", async () => {
