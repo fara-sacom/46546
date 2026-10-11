@@ -32,9 +32,12 @@ async function resolveOrderItem(item: { productId: number; variant?: string | nu
   const productRes = await products.get(item.productId);
   const product = productRes.data;
   let unitPrice = product.sale_price ?? product.price;
-  let quantityAvailable: number | null = product.quantity ?? null;
   let variantMatched = false;
   let variantInfo: unknown = null;
+  // Product-level availability shares the same unlimited_quantity/availability
+  // semantics as a variant's - route it through the same resolver so this never
+  // drifts from salla.inventory.checkVariant's logic again (it did once already).
+  let stock = resolveVariantStock(product as unknown as SallaProductVariant, item.quantity);
 
   if (item.variant) {
     const variantsRes = await products.getVariants(item.productId);
@@ -43,12 +46,10 @@ async function resolveOrderItem(item: { productId: number; variant?: string | nu
     if (match) {
       variantMatched = true;
       unitPrice = match.sale_price ?? match.price ?? unitPrice;
-      quantityAvailable = match.quantity ?? null;
       variantInfo = { sku: match.sku, optionValues: variantOptionValues(match) };
+      stock = resolveVariantStock(match, item.quantity);
     }
   }
-
-  const inStock = quantityAvailable == null ? null : quantityAvailable >= item.quantity;
 
   return {
     productId: item.productId,
@@ -58,8 +59,8 @@ async function resolveOrderItem(item: { productId: number; variant?: string | nu
     variantInfo,
     quantity: item.quantity,
     unitPrice,
-    quantityAvailable,
-    inStock,
+    quantityAvailable: stock.quantity,
+    inStock: stock.inStock,
     // Real Salla storefront link (never a fabricated cart/payment-link API call).
     productUrl: product.urls?.customer ?? null,
   };
