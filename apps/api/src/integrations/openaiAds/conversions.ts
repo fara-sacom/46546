@@ -23,7 +23,7 @@ export type ConversionSendResult =
   | { status: "disabled" }
   | { status: "validated" | "sent"; httpStatus: number };
 
-const URL = "https://bzr.openai.com/v1/events";
+const EVENTS_ENDPOINT = "https://bzr.openai.com/v1/events";
 
 export async function sendOpenAIConversion(
   event: OpenAIConversionEvent,
@@ -50,7 +50,7 @@ export async function sendOpenAIConversion(
   // Attribution identifiers (oppref / obref) are forwarded as provided;
   // never decode, transform or log them.
   const response = await (options.fetchImpl ?? fetch)(
-    `${URL}?pid=${encodeURIComponent(pixelId)}`,
+    `${EVENTS_ENDPOINT}?pid=${encodeURIComponent(pixelId)}`,
     {
       method: "POST",
       headers: {
