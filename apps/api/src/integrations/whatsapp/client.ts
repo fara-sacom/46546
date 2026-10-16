@@ -29,3 +29,31 @@ export async function sendWhatsAppText(to: string, body: string) {
     throw new Error(`WhatsApp API error: ${message}`);
   }
 }
+
+/**
+ * Sends a pre-approved WhatsApp Message Template - required by Meta for any
+ * business-initiated message outside the 24-hour customer service window
+ * (see ./window.ts). `templateName`/`languageCode`/`components` must match a
+ * real template actually approved in WhatsApp Business Manager for this
+ * store's number - this function never invents or assumes one exists.
+ */
+export async function sendWhatsAppTemplate(to: string, templateName: string, languageCode: string, components?: unknown[]) {
+  if (!isWhatsAppConfigured()) throw new WhatsAppNotConfiguredError();
+  const url = `https://graph.facebook.com/${env.whatsapp.apiVersion}/${env.whatsapp.phoneNumberId}/messages`;
+  try {
+    const res = await axios.post(
+      url,
+      {
+        messaging_product: "whatsapp",
+        to,
+        type: "template",
+        template: { name: templateName, language: { code: languageCode }, ...(components ? { components } : {}) },
+      },
+      { headers: { Authorization: `Bearer ${env.whatsapp.accessToken}` }, timeout: 15_000 }
+    );
+    return res.data;
+  } catch (err: any) {
+    const message = err?.response?.data?.error?.message || err.message;
+    throw new Error(`WhatsApp API error: ${message}`);
+  }
+}

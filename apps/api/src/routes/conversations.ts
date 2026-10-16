@@ -41,3 +41,17 @@ conversationsRouter.get(
     res.json({ messages });
   })
 );
+
+// FARA-06: clears the escalated flag once a staff member has actually followed
+// up - the agent never resolves its own escalation, only ever raises one.
+conversationsRouter.post(
+  "/conversations/:id/resolve-escalation",
+  requireStaff,
+  asyncHandler(async (req, res) => {
+    const conversation = await prisma.conversation.update({
+      where: { id: req.params.id },
+      data: { escalated: false, escalationReason: null },
+    });
+    res.json({ conversation });
+  })
+);

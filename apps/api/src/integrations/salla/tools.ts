@@ -1,5 +1,70 @@
 import type { ToolDefinition } from "../../agent/types.js";
-import { products, inventory, orders, customers, categories, reviews, abandonedCarts, storePages, analytics } from "./api.js";
+import { products, inventory, orders, customers, categories, reviews, abandonedCarts, storePages, analytics, type SallaProductVariant } from "./api.js";
+import { prisma } from "../../db.js";
+
+/** Real option values for a variant - Salla reports these under `options`; `option_values` is only a defensive fallback. */
+function variantOptionValues(v: SallaProductVariant): Array<{ value?: string }> {
+  return (v.options ?? v.option_values ?? []) as Array<{ value?: string }>;
+}
+
+/** Exact (case-insensitive) match against a variant's real option values only - never a SKU substring match, which can silently match the wrong size/color. */
+function variantMatchesValue(v: SallaProductVariant, needle: string): boolean {
+  return variantOptionValues(v).some((ov) => String(ov.value ?? "").trim().toLowerCase() === needle);
+}
+
+/** Explicit availability takes precedence; an unlimited SKU has no finite stock count. */
+function resolveVariantStock(v: SallaProductVariant, requestedQuantity = 1): { quantity: number | null; inStock: boolean | null } {
+  const quantity = v.unlimited_quantity === true ? null : typeof v.quantity === "number" && Number.isFinite(v.quantity) ? v.quantity : null;
+  if (v.availability === false) return { quantity, inStock: false };
+  if (v.unlimited_quantity === true) return { quantity, inStock: true };
+  if (v.availability === true && requestedQuantity === 1) return { quantity, inStock: true };
+  if (quantity === null) return { quantity: null, inStock: null };
+  return { quantity, inStock: quantity >= requestedQuantity };
+}
+
+/**
+ * Resolves one order line item against REAL, live Salla data - price, variant
+ * match, and stock. Shared by prepareDraft (first pass) and confirmDraft
+ * (re-verified at confirmation time, since price/stock can change between the
+ * two) so both can never drift apart on what "real" means.
+ */
+async function resolveOrderItem(item: { productId: number; variant?: string | null; quantity: number }) {
+  const productRes = await products.get(item.productId);
+  const product = productRes.data;
+  let unitPrice = product.sale_price ?? product.price;
+  let variantMatched = false;
+  let variantInfo: unknown = null;
+  // Product-level availability shares the same unlimited_quantity/availability
+  // semantics as a variant's - route it through the same resolver so this never
+  // drifts from salla.inventory.checkVariant's logic again (it did once already).
+  let stock = resolveVariantStock(product as unknown as SallaProductVariant, item.quantity);
+
+  if (item.variant) {
+    const variantsRes = await products.getVariants(item.productId);
+    const needle = String(item.variant).trim().toLowerCase();
+    const match = (variantsRes.data ?? []).find((v) => variantMatchesValue(v, needle));
+    if (match) {
+      variantMatched = true;
+      unitPrice = match.sale_price ?? match.price ?? unitPrice;
+      variantInfo = { sku: match.sku, optionValues: variantOptionValues(match) };
+      stock = resolveVariantStock(match, item.quantity);
+    }
+  }
+
+  return {
+    productId: item.productId,
+    productName: product.name,
+    requestedVariant: item.variant ?? null,
+    variantMatched: item.variant ? variantMatched : null,
+    variantInfo,
+    quantity: item.quantity,
+    unitPrice,
+    quantityAvailable: stock.quantity,
+    inStock: stock.inStock,
+    // Real Salla storefront link (never a fabricated cart/payment-link API call).
+    productUrl: product.urls?.customer ?? null,
+  };
+}
 
 export const sallaTools: ToolDefinition[] = [
   // ---------------- READ ----------------
@@ -45,6 +110,56 @@ export const sallaTools: ToolDefinition[] = [
     description: "البحث عن منتج بواسطة SKU",
     inputSchema: { type: "object", properties: { sku: { type: "string" } }, required: ["sku"] },
     handler: (input) => products.getBySku(input.sku),
+  },
+  {
+    name: "salla.products.getVariants",
+    integration: "salla",
+    tier: "READ",
+    description: "قراءة متغيرات منتج (كل تركيبة مقاس/لون) مع السعر والمخزون الحقيقي لكل متغيّر على حدة - استخدميها قبل تأكيد توفر مقاس/لون معيّن للعميلة",
+    inputSchema: { type: "object", properties: { id: { type: "number", description: "معرّف المنتج" } }, required: ["id"] },
+    handler: (input) => products.getVariants(input.id),
+  },
+  {
+    name: "salla.inventory.checkVariant",
+    integration: "salla",
+    tier: "READ",
+    description: "التحقق من توفر مخزون متغيّر محدد لمنتج (مثال: مقاس M أو لون أحمر) بمطابقة قيمة الخيار ضمن متغيرات المنتج الحقيقية من سلة - لا تفترضي التوفر أبدًا، استعلمي بهذه الأداة",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "number", description: "معرّف المنتج" },
+        variant: { type: "string", description: "قيمة الخيار المطلوب التحقق من توفره، مثل M أو أحمر" },
+        sku: { type: "string", description: "SKU كامل ودقيق للمتغيّر؛ يمكن استخدامه وحده أو لتقييد مطابقة الخيار" },
+      },
+      required: ["id"],
+      anyOf: [{ required: ["variant"] }, { required: ["sku"] }],
+    },
+    handler: async (input) => {
+      const needle = typeof input.variant === "string" ? input.variant.trim().toLowerCase() : "";
+      const sku = typeof input.sku === "string" ? input.sku.trim() : "";
+      if (!needle && !sku) throw new Error("Provide a non-empty variant or exact SKU");
+      const res = await products.getVariants(input.id);
+      const matches = (res.data ?? []).filter((v) =>
+        (!needle || variantMatchesValue(v, needle)) && (!sku || v.sku === sku));
+      if (matches.length === 0) {
+        return { found: false, message: `لا يوجد متغيّر مطابق لـ "${input.variant ?? sku}" ضمن متغيرات هذا المنتج.` };
+      }
+      return {
+        found: true,
+        variants: matches.map((v) => {
+          const stock = resolveVariantStock(v);
+          return {
+            id: v.id,
+            sku: v.sku,
+            quantity: stock.quantity,
+            inStock: stock.inStock,
+            note: stock.inStock === null ? "سلة لم تُرجع كمية محددة لهذا المتغيّر (قد يكون مخزونًا غير محدود) - لا تؤكدي التوفر أو عدمه للعميلة، تحققي يدويًا إن لزم." : undefined,
+            price: v.sale_price ?? v.price,
+            optionValues: variantOptionValues(v),
+          };
+        }),
+      };
+    },
   },
   {
     name: "salla.inventory.list",
@@ -169,6 +284,38 @@ export const sallaTools: ToolDefinition[] = [
     },
     handler: (input) => analytics.lowStockProducts(input?.threshold),
   },
+  {
+    name: "salla.orders.checkDraftStatus",
+    integration: "salla",
+    tier: "READ",
+    description:
+      "قراءة الحالة الفعلية الحالية لمسودة طلب - استدعيها دائمًا قبل إخبار العميلة بأي نتيجة نهائية عن طلبها. لا تُخبري العميلة أن طلبها 'تم إنشاؤه' أو أعطيها رقم طلب إلا إذا كانت الحالة المُعادة هنا placed ومعها sallaOrderId حقيقي - لا تفترضي ولا تخترعي رقم طلب أبدًا، ولا تعتمدي على الذاكرة من رسائل سابقة.",
+    inputSchema: {
+      type: "object",
+      properties: { draftId: { type: "string", description: "اختياري - إن تُرك فارغًا تُستخدم أحدث مسودة لهذه المحادثة" } },
+    },
+    handler: async (input, ctx) => {
+      const draft = input.draftId
+        ? await prisma.orderDraft.findUnique({ where: { id: input.draftId } })
+        : ctx.conversationId
+          ? await prisma.orderDraft.findFirst({ where: { conversationId: ctx.conversationId }, orderBy: { createdAt: "desc" } })
+          : null;
+
+      if (!draft) return { found: false };
+
+      return {
+        found: true,
+        draftId: draft.id,
+        status: draft.status,
+        executionBlockedReason: draft.executionBlockedReason,
+        sallaOrderId: draft.sallaOrderId,
+        sallaReferenceId: draft.sallaReferenceId,
+        placedAt: draft.placedAt,
+        estimatedTotal: draft.estimatedTotal,
+        currency: draft.currency,
+      };
+    },
+  },
 
   // ---------------- DRAFT (no external effect) ----------------
   {
@@ -198,8 +345,232 @@ export const sallaTools: ToolDefinition[] = [
       };
     },
   },
+  {
+    name: "salla.orders.prepareDraft",
+    integration: "salla",
+    tier: "DRAFT",
+    description:
+      "تجهيز مسودة طلب/سلة لعميلة تريد الشراء عبر واتساب (السعر والتوفر من بيانات سلة الحقيقية) - لا يُنشئ أي طلب فعلي في سلة أبدًا، ولا يُنشئ رابط دفع مباشر. يعيد لكل منتج رابط صفحته الحقيقي في المتجر (productUrl) لترسليه للعميلة كي تختار مقاسها وتُتم الدفع بنفسها عبر checkout سلة الفعلي؛ إنشاء الطلب الفعلي في النظام يبقى عمل يدوي لفريق المبيعات",
+    inputSchema: {
+      type: "object",
+      properties: {
+        conversationId: { type: "string" },
+        customerRef: { type: "string", description: "رقم واتساب العميلة أو معرّفها، إن توفر" },
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              productId: { type: "number" },
+              variant: { type: "string", description: "قيمة الخيار المطلوب مثل M أو أحمر، اختياري" },
+              quantity: { type: "number" },
+            },
+            required: ["productId", "quantity"],
+          },
+        },
+        paymentMethod: { type: "string", description: "طريقة الدفع كما ذكرتها العميلة حرفيًا (مثل: تحويل بنكي، عند الاستلام) - اتركيه فارغًا إن لم تذكرها، لا تخترعي طريقة" },
+        shippingAddress: { type: "string", description: "عنوان الشحن كما ذكرته العميلة حرفيًا - اتركيه فارغًا إن لم تذكره، لا تخترعي عنوانًا" },
+        note: { type: "string" },
+      },
+      required: ["items"],
+    },
+    handler: async (input, ctx) => {
+      let estimatedTotal = 0;
+      let currency = "SAR";
+      const resolvedItems = [];
+      for (const item of input.items as Array<{ productId: number; variant?: string; quantity: number }>) {
+        const resolved = await resolveOrderItem(item);
+        resolvedItems.push(resolved);
+        if (resolved.unitPrice?.amount) {
+          estimatedTotal += resolved.unitPrice.amount * resolved.quantity;
+          currency = resolved.unitPrice.currency ?? currency;
+        }
+      }
+
+      const draft = await prisma.orderDraft.create({
+        data: {
+          conversationId: input.conversationId ?? ctx.conversationId,
+          customerRef: input.customerRef,
+          itemsJson: JSON.stringify(resolvedItems),
+          estimatedTotal,
+          currency,
+          paymentMethod: input.paymentMethod,
+          shippingAddress: input.shippingAddress,
+          note: input.note,
+        },
+      });
+
+      return {
+        draftId: draft.id,
+        status: draft.status,
+        items: resolvedItems,
+        estimatedTotal,
+        currency,
+        note: "هذا طلب مقترح فقط بناءً على بيانات سلة الحقيقية - لم يُنشأ أي طلب فعلي في سلة ولا رابط دفع مباشر. اعرضي هذا الملخص على العميلة واطلبي تأكيدها الصريح، ثم استدعي salla.orders.confirmDraft فقط بعد موافقتها - لا تفترضي الموافقة.",
+      };
+    },
+  },
+  {
+    name: "salla.orders.confirmDraft",
+    integration: "salla",
+    tier: "DRAFT",
+    description:
+      "تأكيد مسودة طلب بعد موافقة العميلة الصريحة على الملخص الكامل (المنتج/المقاس/الكمية/السعر الإجمالي) - لا تُستدعى إلا بعد كلمة تأكيد واضحة من العميلة (مثل: نعم، أكّدي، موافقة)، وليس لمجرد أنها سألت عن الطلب. draftId اختياري - إن لم تكوني متأكدة من رقمه (مثلًا لأن التأكيد جاء في رسالة واتساب لاحقة ولا تحتفظين بمعرّفات داخلية عبر الرسائل)، اتركيه فارغًا وستُؤكَّد أحدث مسودة غير مؤكدة لهذه المحادثة تلقائيًا. يعيد التحقق من السعر والمخزون الحقيقيين لحظة التأكيد نفسها (قد تكون تغيّرت منذ تجهيز المسودة) - إن تغيّر أي شيء يرفض التأكيد ويوضح الفرق الفعلي بدل تأكيد بيانات قديمة. لا ينشئ أي طلب فعلي في سلة ولا يخصم مخزونًا أبدًا - فقط يغيّر حالة المسودة المحلية إلى confirmed لتصبح جاهزة لمتابعة فريق المبيعات يدويًا.",
+    inputSchema: {
+      type: "object",
+      properties: { draftId: { type: "string", description: "اختياري - إن تُرك فارغًا تُستخدم أحدث مسودة draft لهذه المحادثة" } },
+    },
+    handler: async (input, ctx) => {
+      const draft = input.draftId
+        ? await prisma.orderDraft.findUnique({ where: { id: input.draftId } })
+        : ctx.conversationId
+          ? await prisma.orderDraft.findFirst({
+              where: { conversationId: ctx.conversationId, status: "draft" },
+              orderBy: { createdAt: "desc" },
+            })
+          : null;
+
+      if (!draft) {
+        return {
+          confirmed: false,
+          reason: input.draftId
+            ? "مسودة الطلب غير موجودة"
+            : "لا توجد مسودة طلب بانتظار التأكيد لهذه المحادثة - جهّزي مسودة أولًا عبر salla.orders.prepareDraft",
+        };
+      }
+      if (draft.status !== "draft") {
+        return { confirmed: false, reason: `لا يمكن تأكيد مسودة بحالة "${draft.status}" - يجب أن تكون بحالة draft` };
+      }
+
+      const originalItems = JSON.parse(draft.itemsJson) as Array<{
+        productId: number;
+        requestedVariant: string | null;
+        quantity: number;
+        unitPrice?: { amount: number; currency: string };
+      }>;
+
+      const recheck = [];
+      let stillValid = true;
+
+      for (const original of originalItems) {
+        const resolved = await resolveOrderItem({
+          productId: original.productId,
+          variant: original.requestedVariant,
+          quantity: original.quantity,
+        });
+
+        const priceChangedSinceDraft = resolved.unitPrice?.amount !== original.unitPrice?.amount;
+        const noLongerAvailable = (Boolean(original.requestedVariant) && !resolved.variantMatched) || resolved.inStock === false;
+        if (priceChangedSinceDraft || noLongerAvailable) stillValid = false;
+
+        recheck.push({ ...resolved, priceChangedSinceDraft, noLongerAvailable });
+      }
+
+      if (!stillValid) {
+        return {
+          confirmed: false,
+          reason: "تغيّر السعر أو التوفر منذ تجهيز المسودة - أخبري العميلة بالفرق الفعلي قبل أي تأكيد، لا تؤكدي ببيانات قديمة",
+          recheck,
+        };
+      }
+
+      const updated = await prisma.orderDraft.update({
+        where: { id: draft.id },
+        data: { status: "confirmed" },
+      });
+
+      return {
+        confirmed: true,
+        draftId: updated.id,
+        status: updated.status,
+        recheck,
+        note: "تم تأكيد الطلب محليًا بموافقة العميلة وبيانات سلة الحقيقية وقت التأكيد - لم يُنشأ طلب فعلي في سلة بعد. سيتابع فريق المبيعات إنشاء الطلب الفعلي يدويًا.",
+      };
+    },
+  },
 
   // ---------------- ACTION (requires explicit human approval) ----------------
+  {
+    name: "salla.orders.requestExecution",
+    integration: "salla",
+    tier: "ACTION",
+    description:
+      "طلب تنفيذ طلب مؤكَّد من العميلة - يحتاج موافقة موظف ADMIN صريحة. لا تستدعيها إلا على مسودة بحالة confirmed (بعد salla.orders.confirmDraft). ملاحظة مهمة وحقيقية: سلة لا توفر أي endpoint لإنشاء طلب عبر API للتجار على الإطلاق (تحقّقنا من كامل سطح Salla API الحقيقي) - هذه الأداة لا تُنشئ طلبًا فعليًا في سلة أبدًا ولا يمكنها ذلك. عند موافقة الموظف، تُعاد التحقق من السعر والمخزون الحقيقيين لحظة الموافقة نفسها (قد يكون تغيّر شيء بين تأكيد العميلة وموافقة الموظف) - إن تغيّر شيء تفشل العملية بسبب واضح ولا تستمر ببيانات قديمة. عند النجاح تنتقل المسودة لحالة readyForPlacement مع كل البيانات المتاحة (منتج، مقاس، كمية، سعر، بيانات العميلة، طريقة الدفع، عنوان الشحن) ليُنشئ فريق المبيعات الطلب الفعلي بنفسه يدويًا في سلة، ثم يسجّل رقم الطلب الحقيقي عبر POST /api/order-drafts/:id/record-salla-order.",
+    inputSchema: {
+      type: "object",
+      properties: { draftId: { type: "string", description: "اختياري - إن تُرك فارغًا تُستخدم أحدث مسودة confirmed لهذه المحادثة" } },
+    },
+    handler: async (input, ctx) => {
+      const draft = input.draftId
+        ? await prisma.orderDraft.findUnique({ where: { id: input.draftId } })
+        : ctx.conversationId
+          ? await prisma.orderDraft.findFirst({
+              where: { conversationId: ctx.conversationId, status: "confirmed" },
+              orderBy: { createdAt: "desc" },
+            })
+          : null;
+
+      if (!draft) {
+        throw new Error(
+          input.draftId
+            ? "مسودة الطلب غير موجودة"
+            : "لا توجد مسودة طلب مؤكدة بانتظار التنفيذ لهذه المحادثة - يجب تأكيدها أولًا عبر salla.orders.confirmDraft"
+        );
+      }
+      if (draft.status !== "confirmed") {
+        throw new Error(`لا يمكن طلب تنفيذ مسودة بحالة "${draft.status}" - يجب أن تكون بحالة confirmed`);
+      }
+
+      const originalItems = JSON.parse(draft.itemsJson) as Array<{
+        productId: number;
+        requestedVariant: string | null;
+        quantity: number;
+        unitPrice?: { amount: number; currency: string };
+      }>;
+
+      const recheck = [];
+      let stillValid = true;
+
+      for (const original of originalItems) {
+        const resolved = await resolveOrderItem({
+          productId: original.productId,
+          variant: original.requestedVariant,
+          quantity: original.quantity,
+        });
+        const priceChangedSinceConfirm = resolved.unitPrice?.amount !== original.unitPrice?.amount;
+        const noLongerAvailable = (Boolean(original.requestedVariant) && !resolved.variantMatched) || resolved.inStock === false;
+        if (priceChangedSinceConfirm || noLongerAvailable) stillValid = false;
+        recheck.push({ ...resolved, priceChangedSinceConfirm, noLongerAvailable });
+      }
+
+      if (!stillValid) {
+        await prisma.orderDraft.update({
+          where: { id: draft.id },
+          data: { status: "executionBlocked", executionBlockedReason: "تغيّر السعر أو التوفر بين تأكيد العميلة وموافقة الموظف" },
+        });
+        throw new Error("تغيّر السعر أو التوفر منذ تأكيد العميلة - تم إيقاف التنفيذ بدل المضي ببيانات قديمة. أخبري العميلة بالفرق الفعلي.");
+      }
+
+      const updated = await prisma.orderDraft.update({
+        where: { id: draft.id },
+        data: { status: "readyForPlacement" },
+      });
+
+      return {
+        readyForPlacement: true,
+        draftId: updated.id,
+        status: updated.status,
+        items: recheck,
+        estimatedTotal: draft.estimatedTotal,
+        currency: draft.currency,
+        customerRef: draft.customerRef,
+        paymentMethod: draft.paymentMethod,
+        shippingAddress: draft.shippingAddress,
+        note: "لا يوجد طلب فعلي في سلة بعد - سلة لا توفر إنشاء طلب عبر API إطلاقًا. على فريق المبيعات إنشاء الطلب يدويًا في سلة بهذه البيانات، ثم تسجيل رقم الطلب الحقيقي عبر POST /api/order-drafts/:id/record-salla-order.",
+      };
+    },
+    summarize: (input) => `طلب تنفيذ (تسليم لفريق المبيعات) لمسودة الطلب ${input.draftId ?? "(الأحدث المؤكدة لهذه المحادثة)"}`,
+  },
   {
     name: "salla.products.update",
     integration: "salla",

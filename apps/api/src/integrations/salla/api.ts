@@ -14,6 +14,21 @@ export interface SallaProduct {
   [k: string]: unknown;
 }
 
+export interface SallaProductVariant {
+  id: number;
+  sku?: string | null;
+  price?: { amount: number; currency: string };
+  sale_price?: { amount: number; currency: string } | null;
+  /** Absent/null means Salla didn't report a count for this SKU (e.g. unlimited-stock variants) - never coerce this to 0. */
+  quantity?: number | null;
+  unlimited_quantity?: boolean;
+  availability?: boolean;
+  /** Salla's SKU resource reports the selected size/color values under `options`; `option_values` is kept only as a defensive fallback. */
+  options?: Array<{ id?: number; name?: string; value?: string }>;
+  option_values?: Array<{ id?: number; name?: string; value?: string }>;
+  [k: string]: unknown;
+}
+
 export interface SallaOrder {
   id: number;
   reference_id?: number;
@@ -50,6 +65,28 @@ export const products = {
     salla.get<Paginated<SallaProduct>>("/products", { ...params, keyword }),
 
   getBySku: (sku: string) => salla.get<Paginated<SallaProduct>>("/products", { sku }),
+
+  /**
+   * Real per-variant (size/color combination) price & stock, straight from Salla - never guessed
+   * from the parent product's `options`. Walks every reported page of `/products/{id}/skus`.
+   */
+  async getVariants(id: number): Promise<{ data: SallaProductVariant[] }> {
+    const perPage = 100;
+    let page = 1;
+    let all: SallaProductVariant[] = [];
+    while (true) {
+      const res = await salla.get<Paginated<SallaProductVariant>>(`/products/${id}/skus`, { page, per_page: perPage });
+      all = all.concat(res.data ?? []);
+      if (!res.pagination) break;
+      const totalPages = res.pagination.totalPages;
+      if (!Number.isSafeInteger(totalPages) || totalPages < 0) {
+        throw new Error("Salla returned invalid SKU pagination");
+      }
+      if (page >= totalPages) break;
+      page++;
+    }
+    return { data: all };
+  },
 
   create: (payload: Record<string, unknown>) => salla.post<{ data: SallaProduct }>("/products", payload),
 

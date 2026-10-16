@@ -35,6 +35,16 @@ webhooksRouter.post("/webhooks/whatsapp", async (req, res) => {
       conversation = await prisma.conversation.create({ data: { channel: "WHATSAPP", customerRef: from, language: "ar" } });
     }
 
+    // Structural cross-conversation memory fields are kept in sync here, on every
+    // inbound message - never left to the agent remembering to call a tool. The
+    // interpretive fields (currentIntent/lastProduct/lastOrder/cartContext) are
+    // only ever set explicitly by the agent via memory.updateCustomerContext.
+    await prisma.customerContext.upsert({
+      where: { whatsappNumber: from },
+      create: { customerId: from, whatsappNumber: from, conversationId: conversation.id, lastMessage: text, language: conversation.language },
+      update: { conversationId: conversation.id, lastMessage: text, language: conversation.language },
+    });
+
     await runAgentTurn(conversation.id, text, { actorLabel: `Customer via WhatsApp (${from})` });
     res.sendStatus(200);
   } catch (err) {
